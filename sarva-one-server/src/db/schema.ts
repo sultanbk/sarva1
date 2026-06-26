@@ -14,7 +14,7 @@ export const statusEnum = pgEnum("status", ["trial", "active", "expired", "suspe
 
 export const licenses = pgTable("licenses", {
   id: uuid("id").primaryKey().defaultRandom(),
-  key: varchar("key", { length: 24 }).notNull().unique(),
+  key: varchar("key", { length: 25 }).notNull().unique(),
   shopName: varchar("shop_name", { length: 255 }).notNull(),
   ownerName: varchar("owner_name", { length: 255 }).notNull(),
   phone: varchar("phone", { length: 50 }).notNull(),

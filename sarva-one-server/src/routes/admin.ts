@@ -58,15 +58,14 @@ const createLicenseSchema = z.object({
 });
 
 function expiresAtFromDuration(duration: "1month" | "3months" | "6months" | "1year") {
-  const expiresAt = new Date();
+  const durationDays = {
+    "1month": 30,
+    "3months": 90,
+    "6months": 180,
+    "1year": 365
+  } satisfies Record<typeof duration, number>;
 
-  if (duration === "1year") {
-    expiresAt.setFullYear(expiresAt.getFullYear() + 1);
-    return expiresAt;
-  }
-
-  expiresAt.setMonth(expiresAt.getMonth() + Number(duration.replace("months", "").replace("month", "")));
-  return expiresAt;
+  return new Date(Date.now() + durationDays[duration] * 24 * 60 * 60 * 1000);
 }
 
 const updateLicenseSchema = z.object({

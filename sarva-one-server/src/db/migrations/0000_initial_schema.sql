@@ -14,7 +14,7 @@ END $$;
 
 CREATE TABLE IF NOT EXISTS "licenses" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-  "key" varchar(24) UNIQUE NOT NULL,
+  "key" varchar(25) UNIQUE NOT NULL,
   "shop_name" varchar(255) NOT NULL,
   "owner_name" varchar(255) NOT NULL,
   "phone" varchar(50) NOT NULL,
@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS "licenses" (
   "created_by" varchar(255) NOT NULL,
   "notes" text
 );
+
+ALTER TABLE "licenses" ALTER COLUMN "key" TYPE varchar(25);
 
 CREATE TABLE IF NOT EXISTS "heartbeats" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
