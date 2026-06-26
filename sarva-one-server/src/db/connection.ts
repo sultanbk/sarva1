@@ -8,14 +8,12 @@ if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL is required");
 }
 
+const databaseSsl =
+  process.env.DATABASE_SSL === "true" || process.env.NODE_ENV === "production";
+
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl:
-    process.env.NODE_ENV === "production"
-      ? {
-          rejectUnauthorized: false
-        }
-      : undefined
+  ssl: databaseSsl ? { rejectUnauthorized: false } : undefined
 });
 
 export const db = drizzle(pool, { schema });
