@@ -24,6 +24,12 @@ const loginSchema = z.object({
   password: z.string().min(1)
 });
 
+const setupSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1),
+  name: z.string().min(1)
+});
+
 const listSchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().positive().max(100).default(20),
@@ -82,6 +88,46 @@ adminRouter.post("/login", async (req, res, next) => {
           email: admin.email,
           name: admin.name
         }
+      })
+    );
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json(errorResponse("VALIDATION_ERROR", error.errors[0]?.message ?? "Invalid request."));
+    }
+
+    return next(error);
+  }
+});
+
+adminRouter.post("/setup", async (req, res, next) => {
+  try {
+    const body = setupSchema.parse(req.body);
+    const [{ total }] = await db.select({ total: count() }).from(adminUsers);
+
+    if (total > 0) {
+      return res.status(409).json(errorResponse("ADMIN_ALREADY_EXISTS", "Admin setup has already been completed."));
+    }
+
+    const passwordHash = await bcrypt.hash(body.password, 12);
+    const [admin] = await db
+      .insert(adminUsers)
+      .values({
+        email: body.email,
+        passwordHash,
+        name: body.name
+      })
+      .returning({
+        id: adminUsers.id,
+        email: adminUsers.email,
+        name: adminUsers.name
+      });
+
+    const token = signAdminToken(admin);
+
+    return res.status(201).json(
+      successResponse({
+        token,
+        admin
       })
     );
   } catch (error) {

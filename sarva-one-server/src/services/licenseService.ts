@@ -15,7 +15,8 @@ export type ApiErrorCode =
   | "INVALID_API_KEY"
   | "RATE_LIMITED"
   | "SERVER_MISCONFIGURED"
-  | "LOGIN_FAILED";
+  | "LOGIN_FAILED"
+  | "ADMIN_ALREADY_EXISTS";
 
 export const successResponse = <T>(data: T) => ({ success: true, data });
 
