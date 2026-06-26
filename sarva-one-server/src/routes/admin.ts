@@ -19,6 +19,9 @@ export const adminRouter = Router();
 
 adminRouter.use(adminRateLimit);
 
+const validationMessage = (error: z.ZodError) =>
+  error.errors.map((issue) => `${issue.path.join(".") || "body"}: ${issue.message}`).join("; ");
+
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1)
@@ -39,16 +42,32 @@ const listSchema = z.object({
 });
 
 const createLicenseSchema = z.object({
-  shopName: z.string().min(1),
-  ownerName: z.string().min(1),
-  phone: z.string().min(1),
-  email: z.string().email(),
+  shopName: z.string({ required_error: "Shop name is required." }).min(1),
+  ownerName: z.string({ required_error: "Owner name is required." }).min(1),
+  phone: z.string({ required_error: "Phone is required." }).min(1),
+  email: z.string({ required_error: "Email is required." }).email(),
   plan: z.enum(["starter", "growth", "pro", "custom"]),
   status: z.enum(["trial", "active", "expired", "suspended"]).default("trial"),
-  expiresAt: z.coerce.date(),
+  expiresAt: z.coerce.date().optional(),
+  duration: z.enum(["1month", "3months", "6months", "1year"]).optional(),
   gracePeriodDays: z.number().int().nonnegative().default(7),
   notes: z.string().nullable().optional()
+}).refine((body) => body.expiresAt || body.duration, {
+  message: "Either expiresAt or duration is required.",
+  path: ["expiresAt"]
 });
+
+function expiresAtFromDuration(duration: "1month" | "3months" | "6months" | "1year") {
+  const expiresAt = new Date();
+
+  if (duration === "1year") {
+    expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+    return expiresAt;
+  }
+
+  expiresAt.setMonth(expiresAt.getMonth() + Number(duration.replace("months", "").replace("month", "")));
+  return expiresAt;
+}
 
 const updateLicenseSchema = z.object({
   plan: z.enum(["starter", "growth", "pro", "custom"]).optional(),
@@ -92,7 +111,7 @@ adminRouter.post("/login", async (req, res, next) => {
     );
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return res.status(400).json(errorResponse("VALIDATION_ERROR", error.errors[0]?.message ?? "Invalid request."));
+      return res.status(400).json(errorResponse("VALIDATION_ERROR", validationMessage(error)));
     }
 
     return next(error);
@@ -132,7 +151,7 @@ adminRouter.post("/setup", async (req, res, next) => {
     );
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return res.status(400).json(errorResponse("VALIDATION_ERROR", error.errors[0]?.message ?? "Invalid request."));
+      return res.status(400).json(errorResponse("VALIDATION_ERROR", validationMessage(error)));
     }
 
     return next(error);
@@ -164,7 +183,7 @@ adminRouter.get("/licenses", async (req, res, next) => {
     );
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return res.status(400).json(errorResponse("VALIDATION_ERROR", error.errors[0]?.message ?? "Invalid request."));
+      return res.status(400).json(errorResponse("VALIDATION_ERROR", validationMessage(error)));
     }
 
     return next(error);
@@ -174,6 +193,14 @@ adminRouter.get("/licenses", async (req, res, next) => {
 adminRouter.post("/licenses", async (req, res, next) => {
   try {
     const body = createLicenseSchema.parse(req.body);
+    const expiresAt = body.expiresAt ?? (body.duration ? expiresAtFromDuration(body.duration) : undefined);
+
+    if (!expiresAt) {
+      return res
+        .status(400)
+        .json(errorResponse("VALIDATION_ERROR", "expiresAt: Either expiresAt or duration is required."));
+    }
+
     const key = await generateUniqueLicenseKey();
     const [created] = await db
       .insert(licenses)
@@ -185,7 +212,7 @@ adminRouter.post("/licenses", async (req, res, next) => {
         email: body.email,
         plan: body.plan,
         status: body.status,
-        expiresAt: body.expiresAt,
+        expiresAt,
         gracePeriodDays: body.gracePeriodDays,
         createdBy: req.admin?.email ?? "unknown",
         notes: body.notes ?? null
@@ -195,7 +222,7 @@ adminRouter.post("/licenses", async (req, res, next) => {
     return res.status(201).json(successResponse(created));
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return res.status(400).json(errorResponse("VALIDATION_ERROR", error.errors[0]?.message ?? "Invalid request."));
+      return res.status(400).json(errorResponse("VALIDATION_ERROR", validationMessage(error)));
     }
 
     return next(error);
@@ -235,7 +262,7 @@ adminRouter.put("/licenses/:id", async (req, res, next) => {
     return res.json(successResponse(updated));
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return res.status(400).json(errorResponse("VALIDATION_ERROR", error.errors[0]?.message ?? "Invalid request."));
+      return res.status(400).json(errorResponse("VALIDATION_ERROR", validationMessage(error)));
     }
 
     return next(error);
