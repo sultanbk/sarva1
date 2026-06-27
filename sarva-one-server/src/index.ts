@@ -12,7 +12,25 @@ const port = Number(process.env.PORT ?? 3000);
 
 app.set("trust proxy", 1);
 app.use(helmet());
-app.use(cors());
+
+const allowedOrigins = [
+  process.env.ADMIN_ORIGIN ?? "https://sarvaone-admin.vercel.app",
+  "http://localhost:5173",
+  "http://localhost:3000"
+].filter(Boolean);
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true
+  })
+);
 app.use(express.json({ limit: "1mb" }));
 
 app.get("/health", (_req, res) => {

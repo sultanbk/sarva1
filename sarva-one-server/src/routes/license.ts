@@ -146,7 +146,8 @@ licenseRouter.post("/heartbeat", async (req, res) => {
     }
 
     return res.json(successResponse({ received: true }));
-  } catch {
+  } catch (error) {
+    console.error("Heartbeat processing error:", error);
     return res.json(successResponse({ received: true }));
   }
 });
@@ -177,6 +178,10 @@ licenseRouter.post("/deactivate-machine", async (req, res, next) => {
       return res.status(400).json(errorResponse("VALIDATION_ERROR", error.errors[0]?.message ?? "Invalid request."));
     }
 
-    return res.status(401).json(errorResponse("INVALID_TOKEN", "Admin token is invalid or expired."));
+    if (error instanceof Error && (error.name === "JsonWebTokenError" || error.name === "TokenExpiredError" || error.name === "NotBeforeError")) {
+      return res.status(401).json(errorResponse("INVALID_TOKEN", "Admin token is invalid or expired."));
+    }
+
+    return next(error);
   }
 });

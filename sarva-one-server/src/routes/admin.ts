@@ -178,7 +178,9 @@ adminRouter.post("/setup", async (req, res, next) => {
 adminRouter.use(requireAdminAuth);
 
 adminRouter.get("/config/api-key", (_req, res) => {
-  return res.json(successResponse({ apiKey: process.env.API_KEY ?? "" }));
+  const key = process.env.API_KEY ?? "";
+  const masked = key.length > 4 ? "*".repeat(key.length - 4) + key.slice(-4) : key;
+  return res.json(successResponse({ apiKey: masked }));
 });
 
 adminRouter.put("/password", async (req, res, next) => {
@@ -360,15 +362,23 @@ adminRouter.post("/licenses/:id/suspend", async (req, res, next) => {
 
 adminRouter.post("/licenses/:id/activate", async (req, res, next) => {
   try {
-    const [updated] = await db
-      .update(licenses)
-      .set({ status: "active", updatedAt: new Date() })
-      .where(eq(licenses.id, req.params.id))
-      .returning();
+    const existing = await db.query.licenses.findFirst({ where: eq(licenses.id, req.params.id) });
 
-    if (!updated) {
+    if (!existing) {
       return res.status(404).json(errorResponse("LICENSE_NOT_FOUND", "License was not found."));
     }
+
+    const updates: Record<string, unknown> = { status: "active", updatedAt: new Date() };
+
+    if (existing.expiresAt <= new Date()) {
+      updates.expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    }
+
+    const [updated] = await db
+      .update(licenses)
+      .set(updates)
+      .where(eq(licenses.id, req.params.id))
+      .returning();
 
     return res.json(successResponse(updated));
   } catch (error) {

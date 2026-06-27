@@ -278,7 +278,7 @@ export async function dashboardStats() {
   const expired = await db
     .select({ total: count() })
     .from(licenses)
-    .where(or(eq(licenses.status, "expired"), lte(licenses.expiresAt, now)));
+    .where(eq(licenses.status, "expired"));
   const activeByPlan = await db
     .select({ plan: licenses.plan, total: count() })
     .from(licenses)
