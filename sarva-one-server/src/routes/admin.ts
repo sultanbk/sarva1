@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { and, count, desc, eq } from "drizzle-orm";
+import { asc, count, desc, eq } from "drizzle-orm";
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db/connection.js";
@@ -11,6 +11,8 @@ import {
   dashboardStats,
   errorResponse,
   generateUniqueLicenseKey,
+  latestHeartbeatAtSql,
+  licenseListColumns,
   licenseWithHeartbeatHistory,
   successResponse
 } from "../services/licenseService.js";
@@ -38,7 +40,8 @@ const listSchema = z.object({
   pageSize: z.coerce.number().int().positive().max(100).default(20),
   status: z.enum(["trial", "active", "expired", "suspended"]).optional(),
   plan: z.enum(["starter", "growth", "pro", "custom"]).optional(),
-  q: z.string().trim().min(1).optional()
+  q: z.string().trim().min(1).optional(),
+  sort: z.enum(["createdAt", "shopName", "ownerName", "plan", "status", "expiresAt", "lastHeartbeatAt"]).default("createdAt")
 });
 
 const createLicenseSchema = z.object({
@@ -74,6 +77,21 @@ const updateLicenseSchema = z.object({
   expiresAt: z.coerce.date().optional(),
   notes: z.string().nullable().optional()
 });
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8)
+});
+
+function licenseOrderBy(sort: z.infer<typeof listSchema>["sort"]) {
+  if (sort === "shopName") return asc(licenses.shopName);
+  if (sort === "ownerName") return asc(licenses.ownerName);
+  if (sort === "plan") return asc(licenses.plan);
+  if (sort === "status") return asc(licenses.status);
+  if (sort === "expiresAt") return asc(licenses.expiresAt);
+  if (sort === "lastHeartbeatAt") return desc(latestHeartbeatAtSql());
+  return desc(licenses.createdAt);
+}
 
 adminRouter.post("/login", async (req, res, next) => {
   try {
@@ -159,6 +177,40 @@ adminRouter.post("/setup", async (req, res, next) => {
 
 adminRouter.use(requireAdminAuth);
 
+adminRouter.get("/config/api-key", (_req, res) => {
+  return res.json(successResponse({ apiKey: process.env.API_KEY ?? "" }));
+});
+
+adminRouter.put("/password", async (req, res, next) => {
+  try {
+    const body = changePasswordSchema.parse(req.body);
+    const admin = await db.query.adminUsers.findFirst({
+      where: eq(adminUsers.id, req.admin?.id ?? "")
+    });
+
+    if (!admin) {
+      return res.status(404).json(errorResponse("UNAUTHORIZED", "Admin user was not found."));
+    }
+
+    const passwordMatches = await bcrypt.compare(body.currentPassword, admin.passwordHash);
+
+    if (!passwordMatches) {
+      return res.status(401).json(errorResponse("INVALID_PASSWORD", "Current password is incorrect."));
+    }
+
+    const passwordHash = await bcrypt.hash(body.newPassword, 12);
+    await db.update(adminUsers).set({ passwordHash }).where(eq(adminUsers.id, admin.id));
+
+    return res.json(successResponse({ changed: true }));
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json(errorResponse("VALIDATION_ERROR", validationMessage(error)));
+    }
+
+    return next(error);
+  }
+});
+
 adminRouter.get("/licenses", async (req, res, next) => {
   try {
     const query = listSchema.parse(req.query);
@@ -166,7 +218,13 @@ adminRouter.get("/licenses", async (req, res, next) => {
     const offset = (query.page - 1) * query.pageSize;
 
     const [rows, totalRows] = await Promise.all([
-      db.select().from(licenses).where(where).orderBy(desc(licenses.createdAt)).limit(query.pageSize).offset(offset),
+      db
+        .select(licenseListColumns())
+        .from(licenses)
+        .where(where)
+        .orderBy(licenseOrderBy(query.sort))
+        .limit(query.pageSize)
+        .offset(offset),
       db.select({ total: count() }).from(licenses).where(where)
     ]);
 
@@ -264,6 +322,20 @@ adminRouter.put("/licenses/:id", async (req, res, next) => {
       return res.status(400).json(errorResponse("VALIDATION_ERROR", validationMessage(error)));
     }
 
+    return next(error);
+  }
+});
+
+adminRouter.delete("/licenses/:id", async (req, res, next) => {
+  try {
+    const [deleted] = await db.delete(licenses).where(eq(licenses.id, req.params.id)).returning({ id: licenses.id });
+
+    if (!deleted) {
+      return res.status(404).json(errorResponse("LICENSE_NOT_FOUND", "License was not found."));
+    }
+
+    return res.json(successResponse({ deleted: true }));
+  } catch (error) {
     return next(error);
   }
 });

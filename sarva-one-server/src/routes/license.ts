@@ -56,6 +56,12 @@ licenseRouter.post("/activate", async (req, res, next) => {
       return res.status(403).json(errorResponse("LICENSE_INACTIVE", "License is not available for activation."));
     }
 
+    const state = expiryState(license);
+
+    if (state.status === "expired") {
+      return res.status(403).json(errorResponse("LICENSE_EXPIRED", "License has expired."));
+    }
+
     if (license.machineId && license.machineId !== body.machineId) {
       return res
         .status(409)

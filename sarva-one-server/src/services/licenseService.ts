@@ -1,5 +1,5 @@
 import { randomInt } from "node:crypto";
-import { and, count, desc, eq, gte, ilike, lte, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, getTableColumns, gte, ilike, lte, or, sql } from "drizzle-orm";
 import { db } from "../db/connection.js";
 import { heartbeats, licenses, type License, type Plan } from "../db/schema.js";
 
@@ -16,6 +16,7 @@ export type ApiErrorCode =
   | "RATE_LIMITED"
   | "SERVER_MISCONFIGURED"
   | "LOGIN_FAILED"
+  | "INVALID_PASSWORD"
   | "ADMIN_ALREADY_EXISTS";
 
 export const successResponse = <T>(data: T) => ({ success: true, data });
@@ -109,11 +110,17 @@ export const featureFlags: Record<Plan, Record<string, boolean | number>> = {
   }
 };
 
+function planPriceFromEnv(plan: Plan) {
+  const envName = `PLAN_PRICE_${plan.toUpperCase()}`;
+  const value = Number(process.env[envName] ?? 0);
+  return Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
 export const planMonthlyPrices: Record<Plan, number> = {
-  starter: 0,
-  growth: 0,
-  pro: 0,
-  custom: 0
+  starter: planPriceFromEnv("starter"),
+  growth: planPriceFromEnv("growth"),
+  pro: planPriceFromEnv("pro"),
+  custom: planPriceFromEnv("custom")
 };
 
 const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -245,6 +252,23 @@ export function buildLicenseFilters(filters: {
   }
 
   return conditions.length ? and(...conditions) : undefined;
+}
+
+export type LicenseSort = "shopName" | "ownerName" | "plan" | "status" | "expiresAt" | "lastHeartbeatAt";
+
+export function latestHeartbeatAtSql() {
+  return sql<Date | null>`(
+    select max(${heartbeats.createdAt})
+    from ${heartbeats}
+    where ${heartbeats.licenseId} = ${licenses.id}
+  )`;
+}
+
+export function licenseListColumns() {
+  return {
+    ...getTableColumns(licenses),
+    lastHeartbeatAt: latestHeartbeatAtSql()
+  };
 }
 
 export async function dashboardStats() {
