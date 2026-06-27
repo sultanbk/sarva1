@@ -46,7 +46,8 @@ app.use((_req, res) => {
 
 app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
   console.error(error);
-  res.status(500).json(errorResponse("SERVER_MISCONFIGURED", "Unexpected server error."));
+  const errMsg = error instanceof Error ? error.message : String(error);
+  res.status(500).json(errorResponse("SERVER_MISCONFIGURED", `Unexpected server error: ${errMsg}`));
 });
 
 const server = app.listen(port, () => {
