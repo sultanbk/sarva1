@@ -1,7 +1,9 @@
-import { randomInt } from "node:crypto";
-import { and, count, desc, eq, getTableColumns, gte, ilike, lte, or, sql } from "drizzle-orm";
+import { createHash, randomInt } from "node:crypto";
+import { and, count, desc, eq, getTableColumns, gte, ilike, isNull, isNotNull, lte, or, sql } from "drizzle-orm";
 import { db } from "../db/connection.js";
-import { heartbeats, licenses, type License, type Plan } from "../db/schema.js";
+import { heartbeats, licenseActivations, licenseEvents, licenses, paymentEvents, plans, type License, type Plan } from "../db/schema.js";
+import jwt from "jsonwebtoken";
+import { licenseKeyId, licensePrivateKey, licensePublicKey } from "../config.js";
 
 export type ApiErrorCode =
   | "LICENSE_NOT_FOUND"
@@ -13,11 +15,13 @@ export type ApiErrorCode =
   | "UNAUTHORIZED"
   | "INVALID_TOKEN"
   | "INVALID_API_KEY"
+  | "MAX_SEATS_EXCEEDED"
   | "RATE_LIMITED"
   | "SERVER_MISCONFIGURED"
   | "LOGIN_FAILED"
   | "INVALID_PASSWORD"
-  | "ADMIN_ALREADY_EXISTS";
+  | "ADMIN_ALREADY_EXISTS"
+  | "MACHINE_BLOCKED";
 
 export const successResponse = <T>(data: T) => ({ success: true, data });
 
@@ -143,16 +147,31 @@ export async function generateUniqueLicenseKey() {
 
 export async function findLicenseByKey(key: string) {
   return db.query.licenses.findFirst({
-    where: eq(licenses.key, key)
+    where: and(eq(licenses.key, key), isNull(licenses.deletedAt))
   });
+}
+
+export function hashMachineId(machineId: string) {
+  const salt = process.env.MACHINE_ID_HASH_SECRET ?? process.env.JWT_SECRET ?? "";
+  return createHash("sha256").update(`${salt}:${machineId}`).digest("hex");
 }
 
 export function daysRemaining(expiresAt: Date) {
   return Math.ceil((expiresAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
 }
 
+export type EffectiveLicenseStatus = License["status"] | "grace";
+
+export function graceEndsAt(license: License) {
+  return new Date(license.expiresAt.getTime() + license.gracePeriodDays * 24 * 60 * 60 * 1000);
+}
+
 export function expiryState(license: License) {
   const remaining = daysRemaining(license.expiresAt);
+
+  if (license.status === "suspended" || license.status === "expired") {
+    return { status: license.status, daysRemaining: remaining };
+  }
 
   if (remaining >= 0) {
     return { status: license.status, daysRemaining: remaining };
@@ -165,19 +184,103 @@ export function expiryState(license: License) {
   return { status: "expired", daysRemaining: remaining };
 }
 
-export async function setMachineAndActivate(license: License, machineId: string) {
-  const [updated] = await db
-    .update(licenses)
-    .set({
-      machineId,
-      status: "active",
-      activatedAt: license.activatedAt ?? new Date(),
-      updatedAt: new Date()
-    })
-    .where(eq(licenses.id, license.id))
-    .returning();
+export async function setMachineAndActivate(license: License, machineId: string, appVersion?: string, hostname?: string) {
+  const machineIdHash = hashMachineId(machineId);
 
-  return updated;
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select id from ${licenses} where ${licenses.id} = ${license.id} for update`);
+
+    const existingActivation = await tx.query.licenseActivations.findFirst({
+      where: and(
+        eq(licenseActivations.licenseId, license.id),
+        eq(licenseActivations.machineIdHash, machineIdHash),
+        isNull(licenseActivations.deactivatedAt)
+      )
+    });
+
+    const legacyMachineMatches = !license.machineId || license.machineId === machineId;
+
+    if (existingActivation) {
+      await tx
+        .update(licenseActivations)
+        .set({ lastSeenAt: new Date(), appVersion: appVersion ?? existingActivation.appVersion, hostname: hostname ?? existingActivation.hostname })
+        .where(eq(licenseActivations.id, existingActivation.id));
+    } else {
+      const [{ total }] = await tx
+        .select({ total: count() })
+        .from(licenseActivations)
+        .where(and(eq(licenseActivations.licenseId, license.id), isNull(licenseActivations.deactivatedAt)));
+
+      if (total >= license.maxSeats) {
+        if (!legacyMachineMatches) {
+          return { license: undefined, error: "MAX_SEATS_EXCEEDED" as const };
+        }
+      } else {
+        await tx.insert(licenseActivations).values({
+          licenseId: license.id,
+          machineIdHash,
+          hostname: hostname ?? null,
+          appVersion: appVersion ?? null,
+          lastSeenAt: new Date()
+        });
+      }
+    }
+
+    const [updated] = await tx
+      .update(licenses)
+      .set({
+        machineId: license.machineId ?? machineId,
+        status: "active",
+        activatedAt: license.activatedAt ?? new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(licenses.id, license.id))
+      .returning();
+
+    return { license: updated };
+  });
+}
+
+export async function isMachineBlocked(machineId: string): Promise<boolean> {
+  const machineIdHash = hashMachineId(machineId);
+  const blocked = await db.query.licenseActivations.findFirst({
+    where: and(
+      eq(licenseActivations.machineIdHash, machineIdHash),
+      isNotNull(licenseActivations.blockedAt)
+    )
+  });
+  return Boolean(blocked);
+}
+
+export async function isMachineActivated(license: License, machineId: string) {
+  const machineIdHash = hashMachineId(machineId);
+  const activation = await db.query.licenseActivations.findFirst({
+    where: and(
+      eq(licenseActivations.licenseId, license.id),
+      eq(licenseActivations.machineIdHash, machineIdHash),
+      isNull(licenseActivations.deactivatedAt),
+      isNull(licenseActivations.blockedAt)
+    )
+  });
+
+  if (await isMachineBlocked(machineId)) {
+    return false;
+  }
+
+  return Boolean(activation) || license.machineId === machineId;
+}
+
+export async function touchActivation(licenseId: string, machineId: string, appVersion: string) {
+  await db
+    .update(licenseActivations)
+    .set({ lastSeenAt: new Date(), appVersion })
+    .where(
+      and(
+        eq(licenseActivations.licenseId, licenseId),
+        eq(licenseActivations.machineIdHash, hashMachineId(machineId)),
+        isNull(licenseActivations.deactivatedAt)
+      )
+    );
 }
 
 export async function insertHeartbeat(params: {
@@ -192,6 +295,7 @@ export async function insertHeartbeat(params: {
     totalProducts?: number;
   };
 }) {
+  await touchActivation(params.licenseId, params.machineId, params.appVersion);
   await db.insert(heartbeats).values({
     licenseId: params.licenseId,
     machineId: params.machineId,
@@ -204,13 +308,71 @@ export async function insertHeartbeat(params: {
   });
 }
 
-export function publicLicensePayload(license: License) {
+export async function recordLicenseEvent(params: {
+  licenseId?: string | null;
+  actorType: "admin" | "client" | "system";
+  actorId?: string | null;
+  eventType: string;
+  metadata?: Record<string, unknown>;
+  ipAddress?: string | null;
+}) {
+  await db.insert(licenseEvents).values({
+    licenseId: params.licenseId ?? null,
+    actorType: params.actorType,
+    actorId: params.actorId ?? null,
+    eventType: params.eventType,
+    metadata: params.metadata,
+    ipAddress: params.ipAddress ?? null
+  });
+}
+
+export function signLicensePayload(payload: Record<string, unknown>): string {
+  return jwt.sign(payload, licensePrivateKey(), {
+    algorithm: "RS256",
+    keyid: licenseKeyId()
+  });
+}
+export function licenseStatePayload(license: License) {
+  const state = expiryState(license);
+  const graceEnds = graceEndsAt(license);
+  const issuedAt = new Date();
+  const tokenTtlHours = Number(process.env.LICENSE_TOKEN_TTL_HOURS ?? 24);
+  const validUntil = new Date(issuedAt.getTime() + tokenTtlHours * 60 * 60 * 1000);
+  const offlineDaysAllowance = Number(process.env.OFFLINE_DAYS_ALLOWANCE ?? 7);
+
   return {
+    status: state.status,
+    licenseId: license.id,
+    key: license.key,
     plan: license.plan,
-    expiresAt: license.expiresAt,
+    machineId: license.machineId,
+    storedStatus: license.status,
+    effectiveStatus: state.status,
+    expiresAt: license.expiresAt instanceof Date ? license.expiresAt.toISOString() : license.expiresAt,
+    graceEndsAt: graceEnds.toISOString(),
+    daysRemaining: state.daysRemaining,
     features: featureFlags[license.plan],
-    shopName: license.shopName
+    maxSeats: license.maxSeats,
+    shopName: license.shopName,
+    issuedAt: issuedAt.toISOString(),
+    validUntil: validUntil.toISOString(),
+    offlineDaysAllowance,
+    tokenVersion: 1
   };
+}
+export function buildLicenseState(license: License) {
+  const payload = licenseStatePayload(license);
+  const signature = signLicensePayload(payload);
+
+  return {
+    ...payload,
+    signature,
+    licenseToken: signature
+  };
+}
+
+export function publicLicensePayload(license: License) {
+  return buildLicenseState(license);
 }
 
 export function buildLicenseFilters(filters: {
@@ -219,8 +381,13 @@ export function buildLicenseFilters(filters: {
   q?: string;
   expiresBefore?: Date;
   expiresAfter?: Date;
+  includeArchived?: boolean;
 }) {
   const conditions = [];
+
+  if (!filters.includeArchived) {
+    conditions.push(isNull(licenses.deletedAt));
+  }
 
   if (filters.status) {
     conditions.push(eq(licenses.status, filters.status));
@@ -272,33 +439,94 @@ export function licenseListColumns() {
 }
 
 export async function dashboardStats() {
-  const now = new Date();
-  const totals = await db.select({ total: count() }).from(licenses);
-  const active = await db.select({ total: count() }).from(licenses).where(eq(licenses.status, "active"));
-  const expired = await db
-    .select({ total: count() })
-    .from(licenses)
-    .where(eq(licenses.status, "expired"));
-  const activeByPlan = await db
-    .select({ plan: licenses.plan, total: count() })
-    .from(licenses)
-    .where(eq(licenses.status, "active"))
-    .groupBy(licenses.plan);
+  const allLicenses = await db.select(licenseListColumns()).from(licenses).where(isNull(licenses.deletedAt));
+  const activeByPlanMap = new Map<Plan, number>();
+  const clientsByPlanMap = new Map<Plan, number>();
+  let active = 0;
+  let trial = 0;
+  let grace = 0;
+  let expired = 0;
+  let suspended = 0;
 
+  allLicenses.forEach((license) => {
+    const effectiveStatus = expiryState(license).status;
+    clientsByPlanMap.set(license.plan, (clientsByPlanMap.get(license.plan) ?? 0) + 1);
+
+    if (effectiveStatus === "active") {
+      active += 1;
+      activeByPlanMap.set(license.plan, (activeByPlanMap.get(license.plan) ?? 0) + 1);
+    } else if (effectiveStatus === "trial") {
+      trial += 1;
+    } else if (effectiveStatus === "grace") {
+      grace += 1;
+    } else if (effectiveStatus === "expired") {
+      expired += 1;
+    } else if (effectiveStatus === "suspended") {
+      suspended += 1;
+    }
+  });
+
+  const activeByPlan = Array.from(activeByPlanMap, ([plan, total]) => ({ plan, total }));
+  const clientsByPlan = (["starter", "growth", "pro", "custom"] as Plan[]).map((plan) => ({
+    plan,
+    count: clientsByPlanMap.get(plan) ?? 0
+  }));
   const mrr = activeByPlan.reduce((sum, row) => sum + row.total * planMonthlyPrices[row.plan], 0);
+  const now = Date.now();
+  const sevenDays = 7 * 24 * 60 * 60 * 1000;
+  const twoDays = 2 * 24 * 60 * 60 * 1000;
+  const licensesWithState = allLicenses.map((license) => ({
+    ...license,
+    ...licenseStatePayload(license)
+  }));
+  const monthKey = (value: Date) => value.toLocaleDateString("en-IN", { month: "short" });
+  const months = Array.from({ length: 6 }, (_item, index) => {
+    const date = new Date();
+    date.setMonth(date.getMonth() - (5 - index));
+    return monthKey(date);
+  });
 
   return {
-    total: totals[0]?.total ?? 0,
-    active: active[0]?.total ?? 0,
-    expired: expired[0]?.total ?? 0,
+    total: allLicenses.length,
+    active,
+    trial,
+    grace,
+    expired,
+    suspended,
     mrr,
-    activeByPlan
+    activeByPlan,
+    clientsByPlan,
+    clientsPerMonth: months.map((month) => ({
+      month,
+      clients: allLicenses.filter((license) => monthKey(license.createdAt) === month).length
+    })),
+    heartbeatsDaily: Array.from({ length: 7 }, (_item, index) => {
+      const date = new Date();
+      date.setDate(date.getDate() - (6 - index));
+      const dateKey = date.toDateString();
+      const heartbeats = allLicenses.filter((license) => {
+        if (!license.lastHeartbeatAt) return false;
+        return new Date(license.lastHeartbeatAt).toDateString() === dateKey;
+      }).length;
+
+      return { day: date.toLocaleDateString("en-IN", { weekday: "short" }), heartbeats };
+    }),
+    expiringSoon: licensesWithState.filter((license) => {
+      const expires = new Date(license.expiresAt).getTime();
+      return expires >= now && expires <= now + sevenDays;
+    }),
+    graceLicenses: licensesWithState.filter((license) => license.effectiveStatus === "grace"),
+    inactiveClients: licensesWithState.filter((license) => {
+      if (license.effectiveStatus !== "active") return false;
+      if (!license.lastHeartbeatAt) return true;
+      return now - new Date(license.lastHeartbeatAt).getTime() > twoDays;
+    })
   };
 }
 
 export async function licenseWithHeartbeatHistory(id: string) {
   const license = await db.query.licenses.findFirst({
-    where: eq(licenses.id, id)
+    where: and(eq(licenses.id, id), isNull(licenses.deletedAt))
   });
 
   if (!license) {
@@ -310,8 +538,66 @@ export async function licenseWithHeartbeatHistory(id: string) {
     orderBy: desc(heartbeats.createdAt),
     limit: 100
   });
+  const events = await db.query.licenseEvents.findMany({
+    where: eq(licenseEvents.licenseId, id),
+    orderBy: desc(licenseEvents.createdAt),
+    limit: 100
+  });
+  const activations = await db.query.licenseActivations.findMany({
+    where: eq(licenseActivations.licenseId, id),
+    orderBy: desc(licenseActivations.activatedAt),
+    limit: 100
+  });
+  const payments = await db.query.paymentEvents.findMany({
+    where: eq(paymentEvents.licenseId, id),
+    orderBy: desc(paymentEvents.createdAt),
+    limit: 100
+  });
 
-  return { ...license, heartbeats: history };
+  return { ...license, heartbeats: history, events, activations, payments };
 }
 
 export const updatedNow = sql`now()`;
+
+export function publicKeyPayload() {
+  return {
+    keyId: licenseKeyId(),
+    algorithm: "RS256",
+    publicKey: licensePublicKey() ?? null
+  };
+}
+
+export async function planCatalog() {
+  const rows = await db.query.plans.findMany({
+    with: {
+      entitlements: true
+    },
+    orderBy: plans.code
+  });
+
+  if (!rows.length) {
+    return (["starter", "growth", "pro", "custom"] as Plan[]).map((plan) => ({
+      code: plan,
+      name: plan[0].toUpperCase() + plan.slice(1),
+      monthlyPrice: planMonthlyPrices[plan],
+      entitlements: featureFlags[plan]
+    }));
+  }
+
+  return rows.map((plan) => ({
+    code: plan.code,
+    name: plan.name,
+    monthlyPrice: plan.monthlyPrice,
+    isActive: plan.isActive,
+    entitlements: Object.fromEntries(
+      plan.entitlements.map((entitlement) => [
+        entitlement.entitlementKey,
+        entitlement.valueType === "boolean"
+          ? Boolean(entitlement.booleanValue)
+          : entitlement.valueType === "number"
+            ? entitlement.numberValue ?? 0
+            : entitlement.textValue ?? ""
+      ])
+    )
+  }));
+}

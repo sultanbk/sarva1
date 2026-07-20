@@ -4,8 +4,11 @@ import express, { type NextFunction, type Request, type Response } from "express
 import helmet from "helmet";
 import { pool } from "./db/connection.js";
 import { adminRouter } from "./routes/admin.js";
+import { validateConfig } from "./config.js";
 import { licenseRouter } from "./routes/license.js";
 import { errorResponse, successResponse } from "./services/licenseService.js";
+
+validateConfig();
 
 const app = express();
 const port = Number(process.env.PORT ?? 3000);
@@ -16,6 +19,8 @@ app.use(helmet());
 const allowedOrigins = [
   process.env.ADMIN_ORIGIN ?? "https://sarvaone-admin.vercel.app",
   "http://localhost:5173",
+  "http://localhost:5174",
+  "http://localhost:5175",
   "http://localhost:3000"
 ].filter(Boolean);
 

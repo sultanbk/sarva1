@@ -1,9 +1,9 @@
 import bcrypt from "bcryptjs";
-import { asc, count, desc, eq } from "drizzle-orm";
-import { Router } from "express";
+import { and, asc, count, desc, eq, isNull } from "drizzle-orm";
+import { Router, type Request } from "express";
 import { z } from "zod";
 import { db } from "../db/connection.js";
-import { adminUsers, licenses } from "../db/schema.js";
+import { adminUsers, licenseActivations, licenses, paymentEvents } from "../db/schema.js";
 import { requireAdminAuth, signAdminToken } from "../middleware/auth.js";
 import { adminRateLimit } from "../middleware/rateLimit.js";
 import {
@@ -13,7 +13,10 @@ import {
   generateUniqueLicenseKey,
   latestHeartbeatAtSql,
   licenseListColumns,
+  licenseStatePayload,
   licenseWithHeartbeatHistory,
+  planCatalog,
+  recordLicenseEvent,
   successResponse
 } from "../services/licenseService.js";
 
@@ -31,7 +34,7 @@ const loginSchema = z.object({
 
 const setupSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(1),
+  password: z.string().min(10),
   name: z.string().min(1)
 });
 
@@ -41,7 +44,8 @@ const listSchema = z.object({
   status: z.enum(["trial", "active", "expired", "suspended"]).optional(),
   plan: z.enum(["starter", "growth", "pro", "custom"]).optional(),
   q: z.string().trim().min(1).optional(),
-  sort: z.enum(["createdAt", "shopName", "ownerName", "plan", "status", "expiresAt", "lastHeartbeatAt"]).default("createdAt")
+  sort: z.enum(["createdAt", "shopName", "ownerName", "plan", "status", "expiresAt", "lastHeartbeatAt"]).default("createdAt"),
+  includeArchived: z.enum(["true", "false"]).transform((value) => value === "true").optional()
 });
 
 const createLicenseSchema = z.object({
@@ -54,10 +58,8 @@ const createLicenseSchema = z.object({
   expiresAt: z.coerce.date().optional(),
   duration: z.enum(["1month", "3months", "6months", "1year"]).optional(),
   gracePeriodDays: z.number().int().nonnegative().default(7),
+  maxSeats: z.number().int().positive().max(99).default(1),
   notes: z.string().nullable().optional()
-}).refine((body) => body.expiresAt || body.duration, {
-  message: "Either expiresAt or duration is required.",
-  path: ["expiresAt"]
 });
 
 function expiresAtFromDuration(duration: "1month" | "3months" | "6months" | "1year") {
@@ -75,13 +77,51 @@ const updateLicenseSchema = z.object({
   plan: z.enum(["starter", "growth", "pro", "custom"]).optional(),
   status: z.enum(["trial", "active", "expired", "suspended"]).optional(),
   expiresAt: z.coerce.date().optional(),
+  maxSeats: z.number().int().positive().max(99).optional(),
   notes: z.string().nullable().optional()
 });
 
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1),
-  newPassword: z.string().min(8)
+  newPassword: z.string().min(10)
 });
+
+const manualPaymentSchema = z.object({
+  amount: z.number().int().positive(),
+  currency: z.string().min(1).max(10).default("INR"),
+  provider: z.string().min(1).max(50).default("manual"),
+  providerPaymentId: z.string().max(255).optional(),
+  providerOrderId: z.string().max(255).optional(),
+  months: z.number().int().positive().max(36).default(1),
+  rawPayload: z.record(z.unknown()).optional()
+});
+
+function withLicenseState<T extends Parameters<typeof licenseStatePayload>[0]>(license: T) {
+  return {
+    ...license,
+    ...licenseStatePayload(license)
+  };
+}
+
+function requestIp(req: Request) {
+  return req.ip ?? req.socket.remoteAddress ?? "unknown";
+}
+
+async function recordAdminEvent(
+  req: Request,
+  eventType: string,
+  metadata?: Record<string, unknown>,
+  licenseId?: string | null
+) {
+  await recordLicenseEvent({
+    licenseId,
+    actorType: "admin",
+    actorId: req.admin?.email ?? null,
+    eventType,
+    metadata,
+    ipAddress: requestIp(req)
+  });
+}
 
 function licenseOrderBy(sort: z.infer<typeof listSchema>["sort"]) {
   if (sort === "shopName") return asc(licenses.shopName);
@@ -101,12 +141,26 @@ adminRouter.post("/login", async (req, res, next) => {
     });
 
     if (!admin) {
+      await recordLicenseEvent({
+        actorType: "admin",
+        actorId: body.email,
+        eventType: "admin.login_failed",
+        metadata: { reason: "admin_not_found" },
+        ipAddress: requestIp(req)
+      });
       return res.status(401).json(errorResponse("LOGIN_FAILED", "Email or password is incorrect."));
     }
 
     const passwordMatches = await bcrypt.compare(body.password, admin.passwordHash);
 
     if (!passwordMatches) {
+      await recordLicenseEvent({
+        actorType: "admin",
+        actorId: body.email,
+        eventType: "admin.login_failed",
+        metadata: { reason: "invalid_password" },
+        ipAddress: requestIp(req)
+      });
       return res.status(401).json(errorResponse("LOGIN_FAILED", "Email or password is incorrect."));
     }
 
@@ -137,6 +191,12 @@ adminRouter.post("/login", async (req, res, next) => {
 
 adminRouter.post("/setup", async (req, res, next) => {
   try {
+    const setupToken = process.env.ADMIN_SETUP_TOKEN;
+
+    if (setupToken && req.header("X-Setup-Token") !== setupToken) {
+      return res.status(401).json(errorResponse("UNAUTHORIZED", "A valid setup token is required."));
+    }
+
     const body = setupSchema.parse(req.body);
     const [{ total }] = await db.select({ total: count() }).from(adminUsers);
 
@@ -183,6 +243,14 @@ adminRouter.get("/config/api-key", (_req, res) => {
   return res.json(successResponse({ apiKey: masked }));
 });
 
+adminRouter.get("/plans", async (_req, res, next) => {
+  try {
+    return res.json(successResponse(await planCatalog()));
+  } catch (error) {
+    return next(error);
+  }
+});
+
 adminRouter.put("/password", async (req, res, next) => {
   try {
     const body = changePasswordSchema.parse(req.body);
@@ -202,6 +270,7 @@ adminRouter.put("/password", async (req, res, next) => {
 
     const passwordHash = await bcrypt.hash(body.newPassword, 12);
     await db.update(adminUsers).set({ passwordHash }).where(eq(adminUsers.id, admin.id));
+    await recordAdminEvent(req, "admin.password_changed");
 
     return res.json(successResponse({ changed: true }));
   } catch (error) {
@@ -216,7 +285,7 @@ adminRouter.put("/password", async (req, res, next) => {
 adminRouter.get("/licenses", async (req, res, next) => {
   try {
     const query = listSchema.parse(req.query);
-    const where = buildLicenseFilters(query);
+    const where = buildLicenseFilters({ ...query, includeArchived: query.includeArchived ?? false });
     const offset = (query.page - 1) * query.pageSize;
 
     const [rows, totalRows] = await Promise.all([
@@ -232,7 +301,7 @@ adminRouter.get("/licenses", async (req, res, next) => {
 
     return res.json(
       successResponse({
-        licenses: rows,
+        licenses: rows.map(withLicenseState),
         pagination: {
           page: query.page,
           pageSize: query.pageSize,
@@ -252,13 +321,7 @@ adminRouter.get("/licenses", async (req, res, next) => {
 adminRouter.post("/licenses", async (req, res, next) => {
   try {
     const body = createLicenseSchema.parse(req.body);
-    const expiresAt = body.expiresAt ?? (body.duration ? expiresAtFromDuration(body.duration) : undefined);
-
-    if (!expiresAt) {
-      return res
-        .status(400)
-        .json(errorResponse("VALIDATION_ERROR", "expiresAt: Either expiresAt or duration is required."));
-    }
+    const expiresAt = body.expiresAt ?? (body.duration ? expiresAtFromDuration(body.duration) : new Date("9999-12-31T23:59:59Z"));
 
     const key = await generateUniqueLicenseKey();
     const [created] = await db
@@ -273,12 +336,14 @@ adminRouter.post("/licenses", async (req, res, next) => {
         status: body.status,
         expiresAt,
         gracePeriodDays: body.gracePeriodDays,
+        maxSeats: body.maxSeats,
         createdBy: req.admin?.email ?? "unknown",
         notes: body.notes ?? null
       })
       .returning();
+    await recordAdminEvent(req, "license.created", { after: created }, created.id);
 
-    return res.status(201).json(successResponse(created));
+    return res.status(201).json(successResponse(withLicenseState(created)));
   } catch (error) {
     if (error instanceof z.ZodError) {
       return res.status(400).json(errorResponse("VALIDATION_ERROR", validationMessage(error)));
@@ -296,7 +361,7 @@ adminRouter.get("/licenses/:id", async (req, res, next) => {
       return res.status(404).json(errorResponse("LICENSE_NOT_FOUND", "License was not found."));
     }
 
-    return res.json(successResponse(license));
+    return res.json(successResponse(withLicenseState(license)));
   } catch (error) {
     return next(error);
   }
@@ -305,6 +370,12 @@ adminRouter.get("/licenses/:id", async (req, res, next) => {
 adminRouter.put("/licenses/:id", async (req, res, next) => {
   try {
     const body = updateLicenseSchema.parse(req.body);
+    const existing = await db.query.licenses.findFirst({ where: eq(licenses.id, req.params.id) });
+
+    if (!existing) {
+      return res.status(404).json(errorResponse("LICENSE_NOT_FOUND", "License was not found."));
+    }
+
     const [updated] = await db
       .update(licenses)
       .set({
@@ -317,8 +388,10 @@ adminRouter.put("/licenses/:id", async (req, res, next) => {
     if (!updated) {
       return res.status(404).json(errorResponse("LICENSE_NOT_FOUND", "License was not found."));
     }
+    const eventType = body.expiresAt ? "license.renewed" : "license.updated";
+    await recordAdminEvent(req, eventType, { before: existing, after: updated, changes: body }, updated.id);
 
-    return res.json(successResponse(updated));
+    return res.json(successResponse(withLicenseState(updated)));
   } catch (error) {
     if (error instanceof z.ZodError) {
       return res.status(400).json(errorResponse("VALIDATION_ERROR", validationMessage(error)));
@@ -330,13 +403,25 @@ adminRouter.put("/licenses/:id", async (req, res, next) => {
 
 adminRouter.delete("/licenses/:id", async (req, res, next) => {
   try {
-    const [deleted] = await db.delete(licenses).where(eq(licenses.id, req.params.id)).returning({ id: licenses.id });
+    const existing = await db.query.licenses.findFirst({ where: eq(licenses.id, req.params.id) });
 
-    if (!deleted) {
+    if (!existing) {
       return res.status(404).json(errorResponse("LICENSE_NOT_FOUND", "License was not found."));
     }
 
-    return res.json(successResponse({ deleted: true }));
+    const [archived] = await db
+      .update(licenses)
+      .set({
+        deletedAt: new Date(),
+        deletedBy: req.admin?.email ?? "unknown",
+        updatedAt: new Date()
+      })
+      .where(eq(licenses.id, req.params.id))
+      .returning();
+
+    await recordAdminEvent(req, "license.deleted", { before: existing, after: archived }, archived.id);
+
+    return res.json(successResponse({ deleted: true, archived: true }));
   } catch (error) {
     return next(error);
   }
@@ -344,6 +429,12 @@ adminRouter.delete("/licenses/:id", async (req, res, next) => {
 
 adminRouter.post("/licenses/:id/suspend", async (req, res, next) => {
   try {
+    const existing = await db.query.licenses.findFirst({ where: eq(licenses.id, req.params.id) });
+
+    if (!existing) {
+      return res.status(404).json(errorResponse("LICENSE_NOT_FOUND", "License was not found."));
+    }
+
     const [updated] = await db
       .update(licenses)
       .set({ status: "suspended", updatedAt: new Date() })
@@ -353,8 +444,9 @@ adminRouter.post("/licenses/:id/suspend", async (req, res, next) => {
     if (!updated) {
       return res.status(404).json(errorResponse("LICENSE_NOT_FOUND", "License was not found."));
     }
+    await recordAdminEvent(req, "license.suspended", { before: existing, after: updated }, updated.id);
 
-    return res.json(successResponse(updated));
+    return res.json(successResponse(withLicenseState(updated)));
   } catch (error) {
     return next(error);
   }
@@ -379,8 +471,9 @@ adminRouter.post("/licenses/:id/activate", async (req, res, next) => {
       .set(updates)
       .where(eq(licenses.id, req.params.id))
       .returning();
+    await recordAdminEvent(req, "license.reactivated", { before: existing, after: updated }, updated.id);
 
-    return res.json(successResponse(updated));
+    return res.json(successResponse(withLicenseState(updated)));
   } catch (error) {
     return next(error);
   }
@@ -388,6 +481,12 @@ adminRouter.post("/licenses/:id/activate", async (req, res, next) => {
 
 adminRouter.post("/licenses/:id/reset-machine", async (req, res, next) => {
   try {
+    const existing = await db.query.licenses.findFirst({ where: eq(licenses.id, req.params.id) });
+
+    if (!existing) {
+      return res.status(404).json(errorResponse("LICENSE_NOT_FOUND", "License was not found."));
+    }
+
     const [updated] = await db
       .update(licenses)
       .set({ machineId: null, activatedAt: null, updatedAt: new Date() })
@@ -397,9 +496,143 @@ adminRouter.post("/licenses/:id/reset-machine", async (req, res, next) => {
     if (!updated) {
       return res.status(404).json(errorResponse("LICENSE_NOT_FOUND", "License was not found."));
     }
+    await db
+      .update(licenseActivations)
+      .set({ deactivatedAt: new Date() })
+      .where(and(eq(licenseActivations.licenseId, req.params.id), isNull(licenseActivations.deactivatedAt)));
+    await recordAdminEvent(req, "license.machine_reset", { before: existing, after: updated }, updated.id);
+
+    return res.json(successResponse(withLicenseState(updated)));
+  } catch (error) {
+    return next(error);
+  }
+});
+
+adminRouter.post("/licenses/:id/activations/:activationId/deactivate", async (req, res, next) => {
+  try {
+    const [updated] = await db
+      .update(licenseActivations)
+      .set({ deactivatedAt: new Date() })
+      .where(and(eq(licenseActivations.id, req.params.activationId), eq(licenseActivations.licenseId, req.params.id)))
+      .returning();
+
+    if (!updated) {
+      return res.status(404).json(errorResponse("LICENSE_NOT_FOUND", "Activation was not found."));
+    }
+
+    await recordAdminEvent(req, "license.machine_deactivated", { activationId: updated.id }, req.params.id);
 
     return res.json(successResponse(updated));
   } catch (error) {
+    return next(error);
+  }
+});
+
+adminRouter.post("/licenses/:id/activations/:activationId/block", async (req, res, next) => {
+  try {
+    const [updated] = await db
+      .update(licenseActivations)
+      .set({ blockedAt: new Date(), deactivatedAt: new Date() })
+      .where(and(eq(licenseActivations.id, req.params.activationId), eq(licenseActivations.licenseId, req.params.id)))
+      .returning();
+
+    if (!updated) {
+      return res.status(404).json(errorResponse("LICENSE_NOT_FOUND", "Activation was not found."));
+    }
+
+    await recordAdminEvent(req, "license.machine_blocked", { activationId: updated.id, machineIdHash: updated.machineIdHash }, req.params.id);
+
+    return res.json(successResponse(updated));
+  } catch (error) {
+    return next(error);
+  }
+});
+
+adminRouter.post("/licenses/:id/activations/:activationId/unblock", async (req, res, next) => {
+  try {
+    const [updated] = await db
+      .update(licenseActivations)
+      .set({ blockedAt: null })
+      .where(and(eq(licenseActivations.id, req.params.activationId), eq(licenseActivations.licenseId, req.params.id)))
+      .returning();
+
+    if (!updated) {
+      return res.status(404).json(errorResponse("LICENSE_NOT_FOUND", "Activation was not found."));
+    }
+
+    await recordAdminEvent(req, "license.machine_unblocked", { activationId: updated.id, machineIdHash: updated.machineIdHash }, req.params.id);
+
+    return res.json(successResponse(updated));
+  } catch (error) {
+    return next(error);
+  }
+});
+
+adminRouter.get("/licenses/:id/renewal-quote", async (req, res, next) => {
+  try {
+    const license = await db.query.licenses.findFirst({ where: eq(licenses.id, req.params.id) });
+
+    if (!license) {
+      return res.status(404).json(errorResponse("LICENSE_NOT_FOUND", "License was not found."));
+    }
+
+    const months = Number(req.query.months ?? 1);
+    const safeMonths = Number.isInteger(months) && months > 0 && months <= 36 ? months : 1;
+    const amount = 0;
+
+    return res.json(
+      successResponse({
+        licenseId: license.id,
+        plan: license.plan,
+        months: safeMonths,
+        amount,
+        currency: "INR"
+      })
+    );
+  } catch (error) {
+    return next(error);
+  }
+});
+
+adminRouter.post("/licenses/:id/manual-payment", async (req, res, next) => {
+  try {
+    const body = manualPaymentSchema.parse(req.body);
+    const existing = await db.query.licenses.findFirst({ where: eq(licenses.id, req.params.id) });
+
+    if (!existing) {
+      return res.status(404).json(errorResponse("LICENSE_NOT_FOUND", "License was not found."));
+    }
+
+    const currentExpiry = existing.expiresAt.getTime() > Date.now() ? existing.expiresAt : new Date();
+    const expiresAt = new Date(currentExpiry.getTime() + body.months * 30 * 24 * 60 * 60 * 1000);
+    const [payment] = await db
+      .insert(paymentEvents)
+      .values({
+        licenseId: existing.id,
+        provider: body.provider,
+        providerPaymentId: body.providerPaymentId ?? null,
+        providerOrderId: body.providerOrderId ?? null,
+        amount: body.amount,
+        currency: body.currency,
+        status: "paid",
+        rawPayload: body.rawPayload
+      })
+      .returning();
+    const [updated] = await db
+      .update(licenses)
+      .set({ expiresAt, status: "active", updatedAt: new Date() })
+      .where(eq(licenses.id, existing.id))
+      .returning();
+
+    await recordAdminEvent(req, "payment.manual_recorded", { payment, before: existing, after: updated }, existing.id);
+    await recordAdminEvent(req, "license.renewed", { paymentId: payment.id, months: body.months }, existing.id);
+
+    return res.json(successResponse({ payment, license: withLicenseState(updated) }));
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json(errorResponse("VALIDATION_ERROR", validationMessage(error)));
+    }
+
     return next(error);
   }
 });

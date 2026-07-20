@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import { timingSafeEqual } from "node:crypto";
 import jwt from "jsonwebtoken";
 import { errorResponse } from "../services/licenseService.js";
 
@@ -40,7 +41,10 @@ export function requireApiKey(req: Request, res: Response, next: NextFunction) {
     return res.status(500).json(errorResponse("SERVER_MISCONFIGURED", "API key is not configured."));
   }
 
-  if (!receivedApiKey || receivedApiKey !== configuredApiKey) {
+  const configured = Buffer.from(configuredApiKey);
+  const received = Buffer.from(receivedApiKey ?? "");
+
+  if (!receivedApiKey || configured.length !== received.length || !timingSafeEqual(configured, received)) {
     return res.status(401).json(errorResponse("INVALID_API_KEY", "A valid X-API-Key header is required."));
   }
 

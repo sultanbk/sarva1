@@ -1,0 +1,1 @@
+ALTER TABLE "license_activations" ADD COLUMN "blocked_at" timestamp with time zone;
