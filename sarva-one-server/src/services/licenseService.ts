@@ -294,6 +294,18 @@ export async function insertHeartbeat(params: {
     totalCustomers?: number;
     totalProducts?: number;
   };
+  systemMetadata?: {
+    osPlatform: string;
+    osRelease: string;
+    cpuModel: string;
+    cpuCores: number;
+    totalMemoryGB: number;
+    freeMemoryGB: number;
+    timezone: string;
+    chromeVersion: string;
+    electronVersion: string;
+    dbSizeMB: number;
+  };
 }) {
   await touchActivation(params.licenseId, params.machineId, params.appVersion);
   await db.insert(heartbeats).values({
@@ -304,7 +316,8 @@ export async function insertHeartbeat(params: {
     billsToday: params.usageStats?.billsToday ?? 0,
     totalBills: params.usageStats?.totalBills ?? 0,
     totalCustomers: params.usageStats?.totalCustomers ?? 0,
-    totalProducts: params.usageStats?.totalProducts ?? 0
+    totalProducts: params.usageStats?.totalProducts ?? 0,
+    metadata: params.systemMetadata ?? null
   });
 }
 
@@ -440,6 +453,10 @@ export function licenseListColumns() {
 
 export async function dashboardStats() {
   const allLicenses = await db.select(licenseListColumns()).from(licenses).where(isNull(licenses.deletedAt));
+  const latestUsageByLicense = new Map<
+    string,
+    { billsToday: number; totalBills: number; totalCustomers: number; totalProducts: number; appVersion: string; createdAt: Date }
+  >();
   const activeByPlanMap = new Map<Plan, number>();
   const clientsByPlanMap = new Map<Plan, number>();
   let active = 0;
@@ -447,6 +464,26 @@ export async function dashboardStats() {
   let grace = 0;
   let expired = 0;
   let suspended = 0;
+
+  await Promise.all(
+    allLicenses.map(async (license) => {
+      const latestHeartbeat = await db.query.heartbeats.findFirst({
+        where: eq(heartbeats.licenseId, license.id),
+        orderBy: desc(heartbeats.createdAt)
+      });
+
+      if (latestHeartbeat) {
+        latestUsageByLicense.set(license.id, {
+          billsToday: latestHeartbeat.billsToday,
+          totalBills: latestHeartbeat.totalBills,
+          totalCustomers: latestHeartbeat.totalCustomers,
+          totalProducts: latestHeartbeat.totalProducts,
+          appVersion: latestHeartbeat.appVersion,
+          createdAt: latestHeartbeat.createdAt
+        });
+      }
+    })
+  );
 
   allLicenses.forEach((license) => {
     const effectiveStatus = expiryState(license).status;
@@ -473,12 +510,38 @@ export async function dashboardStats() {
   }));
   const mrr = activeByPlan.reduce((sum, row) => sum + row.total * planMonthlyPrices[row.plan], 0);
   const now = Date.now();
+  const oneDay = 24 * 60 * 60 * 1000;
   const sevenDays = 7 * 24 * 60 * 60 * 1000;
   const twoDays = 2 * 24 * 60 * 60 * 1000;
   const licensesWithState = allLicenses.map((license) => ({
     ...license,
     ...licenseStatePayload(license)
   }));
+  const latestUsages = Array.from(latestUsageByLicense.values());
+  const appVersionsMap = new Map<string, number>();
+
+  latestUsages.forEach((usage) => {
+    appVersionsMap.set(usage.appVersion, (appVersionsMap.get(usage.appVersion) ?? 0) + 1);
+  });
+
+  const clientsWithUsage = licensesWithState.map((license) => {
+    const usage = latestUsageByLicense.get(license.id);
+
+    return {
+      id: license.id,
+      shopName: license.shopName,
+      ownerName: license.ownerName,
+      phone: license.phone,
+      plan: license.plan,
+      effectiveStatus: license.effectiveStatus,
+      lastHeartbeatAt: usage?.createdAt ?? license.lastHeartbeatAt ?? null,
+      appVersion: usage?.appVersion ?? null,
+      billsToday: usage?.billsToday ?? 0,
+      totalBills: usage?.totalBills ?? 0,
+      totalCustomers: usage?.totalCustomers ?? 0,
+      totalProducts: usage?.totalProducts ?? 0
+    };
+  });
   const monthKey = (value: Date) => value.toLocaleDateString("en-IN", { month: "short" });
   const months = Array.from({ length: 6 }, (_item, index) => {
     const date = new Date();
@@ -493,6 +556,32 @@ export async function dashboardStats() {
     grace,
     expired,
     suspended,
+    totalBillsGenerated: latestUsages.reduce((sum, usage) => sum + usage.totalBills, 0),
+    billsToday: latestUsages.reduce((sum, usage) => sum + usage.billsToday, 0),
+    totalCustomersReported: latestUsages.reduce((sum, usage) => sum + usage.totalCustomers, 0),
+    totalProductsReported: latestUsages.reduce((sum, usage) => sum + usage.totalProducts, 0),
+    reportingClients: latestUsageByLicense.size,
+    clientsSyncedToday: clientsWithUsage.filter((client) => client.lastHeartbeatAt && now - new Date(client.lastHeartbeatAt).getTime() <= oneDay).length,
+    clientsNeverSynced: clientsWithUsage.filter((client) => !client.lastHeartbeatAt).length,
+    appVersions: Array.from(appVersionsMap, ([version, count]) => ({ version, count })).sort((a, b) => b.count - a.count),
+    topBillClients: clientsWithUsage
+      .filter((client) => client.totalBills > 0)
+      .sort((a, b) => b.totalBills - a.totalBills)
+      .slice(0, 8),
+    clientSyncHealth: [
+      {
+        status: "Synced today",
+        clients: clientsWithUsage.filter((client) => client.lastHeartbeatAt && now - new Date(client.lastHeartbeatAt).getTime() <= oneDay).length
+      },
+      {
+        status: "Stale",
+        clients: clientsWithUsage.filter((client) => client.lastHeartbeatAt && now - new Date(client.lastHeartbeatAt).getTime() > twoDays).length
+      },
+      {
+        status: "Never synced",
+        clients: clientsWithUsage.filter((client) => !client.lastHeartbeatAt).length
+      }
+    ],
     mrr,
     activeByPlan,
     clientsByPlan,
@@ -533,28 +622,45 @@ export async function licenseWithHeartbeatHistory(id: string) {
     return undefined;
   }
 
-  const history = await db.query.heartbeats.findMany({
-    where: eq(heartbeats.licenseId, id),
-    orderBy: desc(heartbeats.createdAt),
-    limit: 100
-  });
-  const events = await db.query.licenseEvents.findMany({
-    where: eq(licenseEvents.licenseId, id),
-    orderBy: desc(licenseEvents.createdAt),
-    limit: 100
-  });
-  const activations = await db.query.licenseActivations.findMany({
-    where: eq(licenseActivations.licenseId, id),
-    orderBy: desc(licenseActivations.activatedAt),
-    limit: 100
-  });
-  const payments = await db.query.paymentEvents.findMany({
-    where: eq(paymentEvents.licenseId, id),
-    orderBy: desc(paymentEvents.createdAt),
-    limit: 100
-  });
+  const [history, latestHeartbeat, events, activations, payments] = await Promise.all([
+    db.query.heartbeats.findMany({
+      where: eq(heartbeats.licenseId, id),
+      orderBy: desc(heartbeats.createdAt),
+      limit: 100
+    }),
+    db.query.heartbeats.findFirst({
+      where: eq(heartbeats.licenseId, id),
+      orderBy: desc(heartbeats.createdAt)
+    }),
+    db.query.licenseEvents.findMany({
+      where: eq(licenseEvents.licenseId, id),
+      orderBy: desc(licenseEvents.createdAt),
+      limit: 100
+    }),
+    db.query.licenseActivations.findMany({
+      where: eq(licenseActivations.licenseId, id),
+      orderBy: desc(licenseActivations.activatedAt),
+      limit: 100
+    }),
+    db.query.paymentEvents.findMany({
+      where: eq(paymentEvents.licenseId, id),
+      orderBy: desc(paymentEvents.createdAt),
+      limit: 100
+    })
+  ]);
 
-  return { ...license, heartbeats: history, events, activations, payments };
+  const usageSummary = latestHeartbeat
+    ? {
+        billsToday: latestHeartbeat.billsToday,
+        totalBills: latestHeartbeat.totalBills,
+        totalCustomers: latestHeartbeat.totalCustomers,
+        totalProducts: latestHeartbeat.totalProducts,
+        appVersion: latestHeartbeat.appVersion,
+        lastHeartbeatAt: latestHeartbeat.createdAt
+      }
+    : null;
+
+  return { ...license, usageSummary, heartbeats: history, events, activations, payments };
 }
 
 export const updatedNow = sql`now()`;

@@ -38,6 +38,20 @@ const heartbeatSchema = activationSchema.extend({
       totalCustomers: z.number().int().nonnegative().optional(),
       totalProducts: z.number().int().nonnegative().optional()
     })
+    .optional(),
+  systemMetadata: z
+    .object({
+      osPlatform: z.string(),
+      osRelease: z.string(),
+      cpuModel: z.string(),
+      cpuCores: z.number().int(),
+      totalMemoryGB: z.number().int(),
+      freeMemoryGB: z.number().int(),
+      timezone: z.string(),
+      chromeVersion: z.string(),
+      electronVersion: z.string(),
+      dbSizeMB: z.number()
+    })
     .optional()
 });
 
@@ -159,15 +173,30 @@ licenseRouter.post("/heartbeat", async (req, res) => {
     const body = heartbeatSchema.parse(req.body);
     const license = await findLicenseByKey(body.key);
 
-    if (license && (await isMachineActivated(license, body.machineId))) {
-      await insertHeartbeat({
-        licenseId: license.id,
-        machineId: body.machineId,
-        appVersion: body.appVersion,
-        ipAddress: req.ip ?? req.socket.remoteAddress ?? "unknown",
-        usageStats: body.usageStats
-      });
+    if (!license) {
+      return res.status(404).json(errorResponse("LICENSE_NOT_FOUND", "License key was not found."));
     }
+
+    if (await isMachineBlocked(body.machineId)) {
+      return res.status(403).json(errorResponse("MACHINE_BLOCKED", "This device has been blocked by the administrator."));
+    }
+
+    if (!(await isMachineActivated(license, body.machineId))) {
+      return res.status(409).json(errorResponse("MACHINE_MISMATCH", "License is not activated on this device."));
+    }
+
+    if (license.status === "suspended") {
+      return res.status(403).json(errorResponse("LICENSE_SUSPENDED", "License is suspended."));
+    }
+
+    await insertHeartbeat({
+      licenseId: license.id,
+      machineId: body.machineId,
+      appVersion: body.appVersion,
+      ipAddress: req.ip ?? req.socket.remoteAddress ?? "unknown",
+      usageStats: body.usageStats,
+      systemMetadata: body.systemMetadata
+    });
 
     return res.json(successResponse({ received: true }));
   } catch (error) {

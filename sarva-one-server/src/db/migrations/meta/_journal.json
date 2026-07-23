@@ -15,6 +15,13 @@
       "when": 1784552419995,
       "tag": "0001_nice_lady_vermin",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784837589183,
+      "tag": "0002_tidy_warbound",
+      "breakpoints": true
     }
   ]
 }

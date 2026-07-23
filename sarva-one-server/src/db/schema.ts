@@ -62,6 +62,18 @@ export const heartbeats = pgTable("heartbeats", {
   totalCustomers: integer("total_customers").notNull().default(0),
   totalProducts: integer("total_products").notNull().default(0),
   ipAddress: varchar("ip_address", { length: 100 }).notNull(),
+  metadata: jsonb("metadata").$type<{
+    osPlatform: string;
+    osRelease: string;
+    cpuModel: string;
+    cpuCores: number;
+    totalMemoryGB: number;
+    freeMemoryGB: number;
+    timezone: string;
+    chromeVersion: string;
+    electronVersion: string;
+    dbSizeMB: number;
+  }>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
 });
 
