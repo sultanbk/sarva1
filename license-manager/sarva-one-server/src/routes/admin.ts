@@ -190,50 +190,10 @@ adminRouter.post("/login", async (req, res, next) => {
   }
 });
 
-adminRouter.post("/setup", async (req, res, next) => {
-  try {
-    const setupToken = process.env.ADMIN_SETUP_TOKEN;
-
-    if (setupToken && req.header("X-Setup-Token") !== setupToken) {
-      return res.status(401).json(errorResponse("UNAUTHORIZED", "A valid setup token is required."));
-    }
-
-    const body = setupSchema.parse(req.body);
-    const [{ total }] = await db.select({ total: count() }).from(adminUsers);
-
-    if (total > 0) {
-      return res.status(409).json(errorResponse("ADMIN_ALREADY_EXISTS", "Admin setup has already been completed."));
-    }
-
-    const passwordHash = await bcrypt.hash(body.password, 12);
-    const [admin] = await db
-      .insert(adminUsers)
-      .values({
-        email: body.email,
-        passwordHash,
-        name: body.name
-      })
-      .returning({
-        id: adminUsers.id,
-        email: adminUsers.email,
-        name: adminUsers.name
-      });
-
-    const token = signAdminToken(admin);
-
-    return res.status(201).json(
-      successResponse({
-        token,
-        admin
-      })
-    );
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(errorResponse("VALIDATION_ERROR", validationMessage(error)));
-    }
-
-    return next(error);
-  }
+adminRouter.post("/setup", async (_req, res) => {
+  return res.status(403).json(
+    errorResponse("UNAUTHORIZED", "Web-based admin initialization is disabled. Run the CLI tool: npm run admin:create")
+  );
 });
 
 adminRouter.use(requireAdminAuth);

@@ -579,12 +579,6 @@ export const api = {
       skipAuth: true,
       body: body({ email, password }),
     }),
-  setup: (payload: { name: string; email: string; password: string }) =>
-    apiRequest<{ token: string; admin?: { name?: string; email?: string } }>(`${ADMIN_API_PREFIX}/setup`, {
-      method: 'POST',
-      skipAuth: true,
-      body: body(payload),
-    }),
   dashboard: dashboardData,
   clients: async (params = '') => {
     const data = await apiRequest<LicenseListResponse>(`${ADMIN_API_PREFIX}/licenses${params ? `?${params}` : ''}`)

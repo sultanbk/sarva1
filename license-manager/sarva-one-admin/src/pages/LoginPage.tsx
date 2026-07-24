@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import { KeyRound, Shield, Mail, Lock, User } from 'lucide-react'
+import { KeyRound, Shield, Mail, Lock } from 'lucide-react'
 import { useMutation } from '@tanstack/react-query'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { api, getToken, setToken } from '../lib'
@@ -8,13 +8,11 @@ import { Button, Input, Card } from '../components/ui'
 
 export default function LoginPage() {
   const navigate = useNavigate()
-  const [mode, setMode] = useState<'login' | 'setup'>('login')
-  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
 
   const mutation = useMutation({
-    mutationFn: () => (mode === 'login' ? api.login(email, password) : api.setup({ name, email, password })),
+    mutationFn: () => api.login(email, password),
     onSuccess: (data) => {
       setToken(data.token)
       navigate('/', { replace: true })
@@ -59,35 +57,12 @@ export default function LoginPage() {
                 Sarva One Admin
               </h1>
               <p className="mt-2 text-xs font-semibold text-slate-400">
-                {mode === 'login' 
-                  ? 'Sign in to access licensing console' 
-                  : 'Establish the primary administrator account'}
+                Sign in to access licensing console
               </p>
             </div>
 
             {/* Form */}
             <form className="space-y-5" onSubmit={submit}>
-              {mode === 'setup' && (
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                    Administrator Name
-                  </label>
-                  <div className="relative">
-                    <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
-                      <User className="h-4.5 w-4.5" />
-                    </span>
-                    <Input 
-                      className="border-white/10 bg-white/5 pl-10 text-white placeholder:text-slate-500 focus:border-brand-secondary focus:bg-white/10 focus:ring-brand-secondary/20" 
-                      value={name} 
-                      onChange={(e) => setName(e.target.value)} 
-                      placeholder="e.g. S Sultan"
-                      required 
-                      autoComplete="name" 
-                    />
-                  </div>
-                </div>
-              )}
-
               <div className="space-y-1.5">
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-300">
                   Email Address
@@ -140,21 +115,8 @@ export default function LoginPage() {
                 isLoading={mutation.isPending}
               >
                 {!mutation.isPending && <KeyRound className="h-4 w-4" />}
-                {mode === 'login' ? 'Authenticate Account' : 'Initialize Console'}
+                Authenticate Account
               </Button>
-
-              <div className="mt-4 text-center">
-                <button 
-                  className="text-xs font-semibold text-slate-400 hover:text-brand-secondary transition"
-                  type="button" 
-                  onClick={() => {
-                    setMode(mode === 'login' ? 'setup' : 'login');
-                    mutation.reset();
-                  }}
-                >
-                  {mode === 'login' ? 'Initiate first-time setup' : 'Return to sign in'}
-                </button>
-              </div>
             </form>
           </div>
         </Card>
