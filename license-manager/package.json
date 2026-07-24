@@ -1,0 +1,13 @@
+{
+  "name": "sarvaone-license-manager",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev:server": "npm run dev --prefix sarva-one-server",
+    "dev:admin": "npm run dev --prefix sarva-one-admin",
+    "dev": "concurrently --kill-others \"npm:dev:server\" \"npm:dev:admin\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
