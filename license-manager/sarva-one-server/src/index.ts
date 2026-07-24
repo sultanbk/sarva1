@@ -18,6 +18,7 @@ app.use(helmet());
 
 const allowedOrigins = [
   process.env.ADMIN_ORIGIN ?? "https://sarvaone-admin.vercel.app",
+  "https://sarva1.vercel.app",
   "http://localhost:5173",
   "http://localhost:5174",
   "http://localhost:5175",
