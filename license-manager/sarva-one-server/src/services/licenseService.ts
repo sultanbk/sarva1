@@ -1,7 +1,7 @@
 import { createHash, randomInt } from "node:crypto";
 import { and, count, desc, eq, getTableColumns, gte, ilike, isNull, isNotNull, lte, or, sql } from "drizzle-orm";
 import { db } from "../db/connection.js";
-import { heartbeats, licenseActivations, licenseEvents, licenses, paymentEvents, plans, type License, type Plan } from "../db/schema.js";
+import { heartbeats, licenseActivations, licenseEvents, licenses, paymentEvents, plans, planEntitlements, type License, type Plan } from "../db/schema.js";
 import jwt from "jsonwebtoken";
 import { licenseKeyId, licensePrivateKey, licensePublicKey } from "../config.js";
 
@@ -126,6 +126,61 @@ export const planMonthlyPrices: Record<Plan, number> = {
   pro: planPriceFromEnv("pro"),
   custom: planPriceFromEnv("custom")
 };
+
+let cachedPlanEntitlements: Record<string, Record<string, boolean | number | string>> = {};
+
+export async function seedEntitlementsIfEmpty() {
+  try {
+    const [check] = await db.select({ count: count() }).from(planEntitlements);
+    if (Number(check?.count ?? 0) > 0) {
+      await refreshPlanEntitlementsCache();
+      return;
+    }
+
+    console.log("🌱 Database plan entitlements are empty. Seeding from fallback configurations...");
+    const dbPlans = await db.select().from(plans);
+    
+    for (const plan of dbPlans) {
+      const code = plan.code as Plan;
+      const fallbackFeatures = featureFlags[code];
+      if (!fallbackFeatures) continue;
+
+      for (const [key, value] of Object.entries(fallbackFeatures)) {
+        const valType = typeof value;
+        await db.insert(planEntitlements).values({
+          planId: plan.id,
+          entitlementKey: key,
+          valueType: valType,
+          booleanValue: valType === "boolean" ? (value as unknown as boolean) : null,
+          numberValue: valType === "number" ? (value as unknown as number) : null,
+          textValue: valType === "string" ? (value as unknown as string) : null
+        }).onConflictDoNothing();
+      }
+    }
+    console.log("✅ Seeded plan entitlements.");
+    await refreshPlanEntitlementsCache();
+  } catch (error) {
+    console.error("❌ Failed to seed plan entitlements:", error);
+  }
+}
+
+export async function refreshPlanEntitlementsCache() {
+  try {
+    const catalog = await planCatalog();
+    const newCache: Record<string, Record<string, boolean | number | string>> = {};
+    for (const plan of catalog) {
+      newCache[plan.code] = plan.entitlements;
+    }
+    cachedPlanEntitlements = newCache;
+    console.log("⚡ Plan entitlements cache refreshed successfully.");
+  } catch (error) {
+    console.error("❌ Failed to refresh plan entitlements cache:", error);
+  }
+}
+
+export function getPlanEntitlements(plan: Plan): Record<string, boolean | number | string> {
+  return cachedPlanEntitlements[plan] ?? featureFlags[plan];
+}
 
 const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
@@ -364,7 +419,7 @@ export function licenseStatePayload(license: License) {
     expiresAt: license.expiresAt instanceof Date ? license.expiresAt.toISOString() : license.expiresAt,
     graceEndsAt: graceEnds.toISOString(),
     daysRemaining: state.daysRemaining,
-    features: featureFlags[license.plan],
+    features: getPlanEntitlements(license.plan),
     maxSeats: license.maxSeats,
     shopName: license.shopName,
     issuedAt: issuedAt.toISOString(),

@@ -16,6 +16,7 @@ import {
   licenseStatePayload,
   licenseWithHeartbeatHistory,
   planCatalog,
+  planMonthlyPrices,
   recordLicenseEvent,
   successResponse
 } from "../services/licenseService.js";
@@ -578,7 +579,7 @@ adminRouter.get("/licenses/:id/renewal-quote", async (req, res, next) => {
 
     const months = Number(req.query.months ?? 1);
     const safeMonths = Number.isInteger(months) && months > 0 && months <= 36 ? months : 1;
-    const amount = 0;
+    const amount = safeMonths * (planMonthlyPrices[license.plan] ?? 0);
 
     return res.json(
       successResponse({

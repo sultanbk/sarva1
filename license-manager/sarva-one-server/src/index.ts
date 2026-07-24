@@ -6,9 +6,10 @@ import { pool } from "./db/connection.js";
 import { adminRouter } from "./routes/admin.js";
 import { validateConfig } from "./config.js";
 import { licenseRouter } from "./routes/license.js";
-import { errorResponse, successResponse } from "./services/licenseService.js";
+import { errorResponse, seedEntitlementsIfEmpty, successResponse } from "./services/licenseService.js";
 
 validateConfig();
+seedEntitlementsIfEmpty().catch(console.error);
 
 const app = express();
 const port = Number(process.env.PORT ?? 3000);
