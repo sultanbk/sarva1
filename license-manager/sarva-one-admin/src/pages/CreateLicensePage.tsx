@@ -81,9 +81,8 @@ Support Hotline: +91-XXXXXXXXXX`)
             <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Service Plan Tier</label>
             <Select name="plan" defaultValue="starter">
               <option value="starter">Starter Plan</option>
-              <option value="growth">Growth Plan</option>
-              <option value="pro">Pro Enterprise</option>
-              <option value="custom">Custom Tier</option>
+              <option value="professional">Professional Plan</option>
+              <option value="enterprise">Enterprise Plan</option>
             </Select>
           </div>
 

@@ -12,23 +12,17 @@ export const planConfig: Record<Plan, { bg: string; text: string; ring: string; 
     ring: 'ring-slate-600/10',
     label: 'Starter Plan',
   },
-  growth: {
+  professional: {
     bg: 'bg-blue-50',
     text: 'text-blue-700',
     ring: 'ring-blue-700/10',
-    label: 'Growth Plan',
+    label: 'Professional Plan',
   },
-  pro: {
+  enterprise: {
     bg: 'bg-purple-50',
     text: 'text-purple-700',
     ring: 'ring-purple-700/10',
-    label: 'Pro Enterprise',
-  },
-  custom: {
-    bg: 'bg-amber-50/70',
-    text: 'text-amber-800',
-    ring: 'ring-amber-600/20',
-    label: 'Custom Tier',
+    label: 'Enterprise Plan',
   },
 }
 

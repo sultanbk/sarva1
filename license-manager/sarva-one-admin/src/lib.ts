@@ -127,7 +127,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}) 
   return (((data as { data?: unknown } | null)?.data ?? data) as T)
 }
 
-export type Plan = 'starter' | 'growth' | 'pro' | 'custom'
+export type Plan = 'starter' | 'professional' | 'enterprise'
 export type LicenseStatus = 'active' | 'trial' | 'grace' | 'expired' | 'suspended'
 
 type ServerLicenseStatus = Exclude<LicenseStatus, 'grace'>
@@ -532,7 +532,7 @@ async function dashboardData(): Promise<DashboardData> {
     mrr: stats.mrr,
     arr: stats.mrr * 12,
     clientsPerMonth: stats.clientsPerMonth ?? [],
-    clientsByPlan: stats.clientsByPlan ?? (['starter', 'growth', 'pro', 'custom'] as Plan[]).map((plan) => ({ plan, count: 0 })),
+    clientsByPlan: stats.clientsByPlan ?? (['starter', 'professional', 'enterprise'] as Plan[]).map((plan) => ({ plan, count: 0 })),
     heartbeatsDaily: stats.heartbeatsDaily ?? [],
     clientSyncHealth: stats.clientSyncHealth ?? [],
     appVersions: stats.appVersions ?? [],
@@ -582,7 +582,10 @@ export const api = {
   dashboard: dashboardData,
   clients: async (params = '') => {
     const data = await apiRequest<LicenseListResponse>(`${ADMIN_API_PREFIX}/licenses${params ? `?${params}` : ''}`)
-    return data.licenses.map((license) => toClient(license))
+    return {
+      licenses: data.licenses.map((license) => toClient(license)),
+      pagination: data.pagination
+    }
   },
   client: async (id: string) => toClientDetail(await apiRequest<ServerLicenseDetail>(`${ADMIN_API_PREFIX}/licenses/${id}`)),
   createClient: (payload: CreateLicenseInput) =>
@@ -613,7 +616,7 @@ export const api = {
   plans: () => apiRequest<Array<{ code: string; name: string; monthlyPrice: number; entitlements: Record<string, boolean | number | string> }>>(`${ADMIN_API_PREFIX}/plans`),
   renewalQuote: (id: string, months = 1) =>
     apiRequest<{ licenseId: string; plan: Plan; months: number; amount: number; currency: string }>(`${ADMIN_API_PREFIX}/licenses/${id}/renewal-quote?months=${months}`),
-  recordManualPayment: (id: string, payload: { amount: number; months?: number; currency?: string; providerPaymentId?: string }) =>
+  recordManualPayment: (id: string, payload: { amount: number; months?: number; currency?: string; provider?: string; providerPaymentId?: string }) =>
     apiRequest<{ payment: ServerPayment; license: ServerLicense }>(`${ADMIN_API_PREFIX}/licenses/${id}/manual-payment`, { method: 'POST', body: body(payload) }),
   changePassword: (payload: { currentPassword: string; newPassword: string }) =>
     apiRequest<{ changed: boolean }>(`${ADMIN_API_PREFIX}/password`, { method: 'PUT', body: body(payload) }),
@@ -622,4 +625,8 @@ export const api = {
     return { status: 'online' }
   },
   apiKey: () => apiRequest<{ apiKey: string }>(`${ADMIN_API_PREFIX}/config/api-key`),
+  auditLog: (params = '') =>
+    apiRequest<{ events: ServerLicenseEvent[]; pagination: { page: number; pageSize: number; total: number } }>(`${ADMIN_API_PREFIX}/audit-log${params ? `?${params}` : ''}`),
+  bulkExtend: (licenseIds: string[], months: number) =>
+    apiRequest<{ updated: ServerLicense[] }>(`${ADMIN_API_PREFIX}/licenses/bulk-extend`, { method: 'POST', body: body({ licenseIds, months }) }),
 }

@@ -52,7 +52,7 @@ export const featureFlags: Record<Plan, Record<string, boolean | number>> = {
     multiUser: false,
     maxUsers: 1
   },
-  growth: {
+  professional: {
     maxBillsPerMonth: 500,
     maxProducts: 1000,
     maxCustomers: -1,
@@ -72,27 +72,7 @@ export const featureFlags: Record<Plan, Record<string, boolean | number>> = {
     multiUser: true,
     maxUsers: 2
   },
-  pro: {
-    maxBillsPerMonth: -1,
-    maxProducts: -1,
-    maxCustomers: -1,
-    whatsappIntegration: true,
-    creditManagement: true,
-    creditAging: true,
-    customerAnalytics: true,
-    expenseTracking: true,
-    estimates: true,
-    returnExchange: true,
-    barcodeLabels: true,
-    dataExport: true,
-    googleDriveBackup: true,
-    auditTrail: true,
-    profitLossReport: true,
-    gstReports: true,
-    multiUser: true,
-    maxUsers: -1
-  },
-  custom: {
+  enterprise: {
     maxBillsPerMonth: -1,
     maxProducts: -1,
     maxCustomers: -1,
@@ -122,9 +102,8 @@ function planPriceFromEnv(plan: Plan) {
 
 export const planMonthlyPrices: Record<Plan, number> = {
   starter: planPriceFromEnv("starter"),
-  growth: planPriceFromEnv("growth"),
-  pro: planPriceFromEnv("pro"),
-  custom: planPriceFromEnv("custom")
+  professional: planPriceFromEnv("professional"),
+  enterprise: planPriceFromEnv("enterprise")
 };
 
 let cachedPlanEntitlements: Record<string, Record<string, boolean | number | string>> = {};
@@ -520,25 +499,31 @@ export async function dashboardStats() {
   let expired = 0;
   let suspended = 0;
 
-  await Promise.all(
-    allLicenses.map(async (license) => {
-      const latestHeartbeat = await db.query.heartbeats.findFirst({
-        where: eq(heartbeats.licenseId, license.id),
-        orderBy: desc(heartbeats.createdAt)
-      });
+  const latestHeartbeatsResult = (await db.execute(sql`
+    select distinct on (license_id) 
+      license_id as "licenseId", 
+      bills_today as "billsToday", 
+      total_bills as "totalBills", 
+      total_customers as "totalCustomers", 
+      total_products as "totalProducts", 
+      app_version as "appVersion", 
+      created_at as "createdAt"
+    from heartbeats 
+    order by license_id, created_at desc
+  `)) as any;
 
-      if (latestHeartbeat) {
-        latestUsageByLicense.set(license.id, {
-          billsToday: latestHeartbeat.billsToday,
-          totalBills: latestHeartbeat.totalBills,
-          totalCustomers: latestHeartbeat.totalCustomers,
-          totalProducts: latestHeartbeat.totalProducts,
-          appVersion: latestHeartbeat.appVersion,
-          createdAt: latestHeartbeat.createdAt
-        });
-      }
-    })
-  );
+  const latestHeartbeats = latestHeartbeatsResult.rows || [];
+
+  for (const hb of latestHeartbeats) {
+    latestUsageByLicense.set(hb.licenseId, {
+      billsToday: Number(hb.billsToday),
+      totalBills: Number(hb.totalBills),
+      totalCustomers: Number(hb.totalCustomers),
+      totalProducts: Number(hb.totalProducts),
+      appVersion: String(hb.appVersion),
+      createdAt: new Date(hb.createdAt)
+    });
+  }
 
   allLicenses.forEach((license) => {
     const effectiveStatus = expiryState(license).status;
@@ -559,7 +544,7 @@ export async function dashboardStats() {
   });
 
   const activeByPlan = Array.from(activeByPlanMap, ([plan, total]) => ({ plan, total }));
-  const clientsByPlan = (["starter", "growth", "pro", "custom"] as Plan[]).map((plan) => ({
+  const clientsByPlan = (["starter", "professional", "enterprise"] as Plan[]).map((plan) => ({
     plan,
     count: clientsByPlanMap.get(plan) ?? 0
   }));
@@ -737,7 +722,7 @@ export async function planCatalog() {
   });
 
   if (!rows.length) {
-    return (["starter", "growth", "pro", "custom"] as Plan[]).map((plan) => ({
+    return (["starter", "professional", "enterprise"] as Plan[]).map((plan) => ({
       code: plan,
       name: plan[0].toUpperCase() + plan.slice(1),
       monthlyPrice: planMonthlyPrices[plan],

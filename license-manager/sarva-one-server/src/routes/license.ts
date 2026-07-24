@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db/connection.js";
 import { licenses } from "../db/schema.js";
-import { requireApiKey, verifyAdminToken } from "../middleware/auth.js";
+import { requireApiKey } from "../middleware/auth.js";
 import { licenseRateLimit } from "../middleware/rateLimit.js";
 import {
   errorResponse,
@@ -53,11 +53,6 @@ const heartbeatSchema = activationSchema.extend({
       dbSizeMB: z.number()
     })
     .optional()
-});
-
-const deactivateSchema = z.object({
-  key: z.string().min(1),
-  machineId: z.string().min(1)
 });
 
 licenseRouter.get("/public-key", (_req, res) => {
@@ -202,45 +197,5 @@ licenseRouter.post("/heartbeat", async (req, res) => {
   } catch (error) {
     console.error("Heartbeat processing error:", error);
     return res.json(successResponse({ received: true }));
-  }
-});
-
-licenseRouter.post("/deactivate-machine", async (req, res, next) => {
-  try {
-    const body = deactivateSchema.parse(req.body);
-    const authorization = req.header("Authorization");
-
-    if (!authorization?.startsWith("Bearer ")) {
-      return res.status(401).json(errorResponse("UNAUTHORIZED", "Bearer token is required."));
-    }
-
-    verifyAdminToken(authorization.slice("Bearer ".length));
-
-    const license = await findLicenseByKey(body.key);
-
-    if (!license) {
-      return res.status(404).json(errorResponse("LICENSE_NOT_FOUND", "License key was not found."));
-    }
-
-    if (license.machineId !== body.machineId) {
-      return res.status(409).json(errorResponse("MACHINE_MISMATCH", "License is not activated on this device."));
-    }
-
-    await db
-      .update(licenses)
-      .set({ machineId: null, activatedAt: null, updatedAt: new Date() })
-      .where(eq(licenses.id, license.id));
-
-    return res.json(successResponse({ deactivated: true }));
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(errorResponse("VALIDATION_ERROR", error.errors[0]?.message ?? "Invalid request."));
-    }
-
-    if (error instanceof Error && (error.name === "JsonWebTokenError" || error.name === "TokenExpiredError" || error.name === "NotBeforeError")) {
-      return res.status(401).json(errorResponse("INVALID_TOKEN", "Admin token is invalid or expired."));
-    }
-
-    return next(error);
   }
 });

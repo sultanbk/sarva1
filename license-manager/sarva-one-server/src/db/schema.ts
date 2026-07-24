@@ -11,7 +11,7 @@ import {
   varchar
 } from "drizzle-orm/pg-core";
 
-export const planEnum = pgEnum("plan", ["starter", "growth", "pro", "custom"]);
+export const planEnum = pgEnum("plan", ["starter", "professional", "enterprise"]);
 export const statusEnum = pgEnum("status", ["trial", "active", "expired", "suspended"]);
 
 export const licenses = pgTable("licenses", {

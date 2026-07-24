@@ -1,11 +1,11 @@
 import bcrypt from "bcryptjs";
-import { and, asc, count, desc, eq, isNull } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNull, ilike, or } from "drizzle-orm";
 import { Router, type Request } from "express";
 import { z } from "zod";
 import { db } from "../db/connection.js";
-import { adminUsers, licenseActivations, licenses, paymentEvents } from "../db/schema.js";
+import { adminUsers, licenseActivations, licenseEvents, licenses, paymentEvents } from "../db/schema.js";
 import { requireAdminAuth, signAdminToken } from "../middleware/auth.js";
-import { adminRateLimit } from "../middleware/rateLimit.js";
+import { adminRateLimit, loginRateLimit } from "../middleware/rateLimit.js";
 import {
   buildLicenseFilters,
   dashboardStats,
@@ -43,7 +43,7 @@ const listSchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().positive().max(100).default(20),
   status: z.enum(["trial", "active", "expired", "suspended"]).optional(),
-  plan: z.enum(["starter", "growth", "pro", "custom"]).optional(),
+  plan: z.enum(["starter", "professional", "enterprise"]).optional(),
   q: z.string().trim().min(1).optional(),
   sort: z.enum(["createdAt", "shopName", "ownerName", "plan", "status", "expiresAt", "lastHeartbeatAt"]).default("createdAt"),
   includeArchived: z.enum(["true", "false"]).transform((value) => value === "true").optional()
@@ -54,7 +54,7 @@ const createLicenseSchema = z.object({
   ownerName: z.string({ required_error: "Owner name is required." }).min(1),
   phone: z.string({ required_error: "Phone is required." }).min(1),
   email: z.string({ required_error: "Email is required." }).email(),
-  plan: z.enum(["starter", "growth", "pro", "custom"]),
+  plan: z.enum(["starter", "professional", "enterprise"]),
   status: z.enum(["trial", "active", "expired", "suspended"]).default("trial"),
   expiresAt: z.coerce.date().optional(),
   duration: z.enum(["1month", "3months", "6months", "1year"]).optional(),
@@ -75,10 +75,11 @@ function expiresAtFromDuration(duration: "1month" | "3months" | "6months" | "1ye
 }
 
 const updateLicenseSchema = z.object({
-  plan: z.enum(["starter", "growth", "pro", "custom"]).optional(),
+  plan: z.enum(["starter", "professional", "enterprise"]).optional(),
   status: z.enum(["trial", "active", "expired", "suspended"]).optional(),
   expiresAt: z.coerce.date().optional(),
   maxSeats: z.number().int().positive().max(99).optional(),
+  gracePeriodDays: z.number().int().nonnegative().optional(),
   notes: z.string().nullable().optional()
 });
 
@@ -134,7 +135,7 @@ function licenseOrderBy(sort: z.infer<typeof listSchema>["sort"]) {
   return desc(licenses.createdAt);
 }
 
-adminRouter.post("/login", async (req, res, next) => {
+adminRouter.post("/login", loginRateLimit, async (req, res, next) => {
   try {
     const body = loginSchema.parse(req.body);
     const admin = await db.query.adminUsers.findFirst({
@@ -602,6 +603,117 @@ adminRouter.get("/dashboard", async (_req, res, next) => {
   try {
     return res.json(successResponse(await dashboardStats()));
   } catch (error) {
+    return next(error);
+  }
+});
+
+const auditLogQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce.number().int().positive().max(100).default(20),
+  actorType: z.string().optional(),
+  eventType: z.string().optional(),
+  q: z.string().optional(),
+  licenseId: z.string().uuid().optional()
+});
+
+adminRouter.get("/audit-log", async (req, res, next) => {
+  try {
+    const query = auditLogQuerySchema.parse(req.query);
+    const offset = (query.page - 1) * query.pageSize;
+    
+    const conditions = [];
+    if (query.actorType) {
+      conditions.push(eq(licenseEvents.actorType, query.actorType));
+    }
+    if (query.eventType) {
+      conditions.push(eq(licenseEvents.eventType, query.eventType));
+    }
+    if (query.licenseId) {
+      conditions.push(eq(licenseEvents.licenseId, query.licenseId));
+    }
+    if (query.q) {
+      const search = `%${query.q}%`;
+      conditions.push(
+        or(
+          ilike(licenseEvents.actorId, search),
+          ilike(licenseEvents.eventType, search)
+        )
+      );
+    }
+    const where = conditions.length ? and(...conditions) : undefined;
+
+    const [rows, totalRows] = await Promise.all([
+      db
+        .select()
+        .from(licenseEvents)
+        .where(where)
+        .orderBy(desc(licenseEvents.createdAt))
+        .limit(query.pageSize)
+        .offset(offset),
+      db.select({ total: count() }).from(licenseEvents).where(where)
+    ]);
+
+    return res.json(
+      successResponse({
+        events: rows,
+        pagination: {
+          page: query.page,
+          pageSize: query.pageSize,
+          total: totalRows[0]?.total ?? 0
+        }
+      })
+    );
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json(errorResponse("VALIDATION_ERROR", validationMessage(error)));
+    }
+    return next(error);
+  }
+});
+
+const bulkExtendSchema = z.object({
+  licenseIds: z.array(z.string().uuid()),
+  months: z.number().int().positive().max(36)
+});
+
+adminRouter.post("/licenses/bulk-extend", async (req, res, next) => {
+  try {
+    const body = bulkExtendSchema.parse(req.body);
+    const updatedLicenses: any[] = [];
+    
+    await db.transaction(async (tx) => {
+      for (const id of body.licenseIds) {
+        const existing = await tx.query.licenses.findFirst({ where: eq(licenses.id, id) });
+        if (!existing) continue;
+
+        const currentExpiry = existing.expiresAt.getTime() > Date.now() ? existing.expiresAt : new Date();
+        const expiresAt = new Date(currentExpiry.getTime() + body.months * 30 * 24 * 60 * 60 * 1000);
+
+        const [updated] = await tx
+          .update(licenses)
+          .set({ expiresAt, status: "active", updatedAt: new Date() })
+          .where(eq(licenses.id, id))
+          .returning();
+
+        if (updated) {
+          updatedLicenses.push(withLicenseState(updated));
+          await recordLicenseEvent({
+            licenseId: id,
+            actorType: "admin",
+            actorId: req.admin?.email ?? null,
+            eventType: "license.renewed",
+            metadata: { bulk: true, months: body.months, before: existing, after: updated },
+            ipAddress: requestIp(req)
+          });
+        }
+      }
+    });
+
+    return res.json(successResponse({ updated: updatedLicenses }));
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json(errorResponse("VALIDATION_ERROR", validationMessage(error)));
+    }
     return next(error);
   }
 });

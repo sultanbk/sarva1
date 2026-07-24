@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate, NavLink } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { 
@@ -89,11 +89,37 @@ export default function ClientDetailPage() {
     },
   })
 
-  const renew = useMutation({
-    mutationFn: () => api.renew(id),
+  // Payment / Renewal Modal States
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [paymentMonths, setPaymentMonths] = useState(1)
+  const [paymentAmount, setPaymentAmount] = useState(0)
+  const [paymentProvider, setPaymentProvider] = useState('manual')
+  const [paymentIdRef, setPaymentIdRef] = useState('')
+
+  const quoteQuery = useQuery({
+    queryKey: ['renewal-quote', id, paymentMonths],
+    queryFn: () => api.renewalQuote(id, paymentMonths),
+    enabled: showPaymentModal && Boolean(id)
+  })
+
+  useEffect(() => {
+    if (quoteQuery.data) {
+      setPaymentAmount(quoteQuery.data.amount)
+    }
+  }, [quoteQuery.data])
+
+  const recordPayment = useMutation({
+    mutationFn: () => api.recordManualPayment(id, {
+      amount: paymentAmount,
+      months: paymentMonths,
+      provider: paymentProvider,
+      providerPaymentId: paymentIdRef || undefined
+    }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['client', id] })
-    },
+      setShowPaymentModal(false)
+      setPaymentIdRef('')
+    }
   })
 
   const handleCopyKey = (key: string) => {
@@ -272,10 +298,14 @@ export default function ClientDetailPage() {
                   <Button 
                     variant="secondary" 
                     className="justify-start text-left cursor-pointer"
-                    onClick={() => renew.mutate()}
-                    isLoading={renew.isPending}
+                    onClick={() => {
+                      setPaymentMonths(1)
+                      setPaymentProvider('manual')
+                      setPaymentIdRef('')
+                      setShowPaymentModal(true)
+                    }}
                   >
-                    <CalendarClock className="h-4.5 w-4.5 text-brand-primary" /> Renew License (+30d)
+                    <CalendarClock className="h-4.5 w-4.5 text-brand-primary" /> Renew License & Pay
                   </Button>
 
                   <Button 
@@ -301,9 +331,8 @@ export default function ClientDetailPage() {
                       disabled={update.isPending}
                     >
                       <option value="starter">Starter</option>
-                      <option value="growth">Growth</option>
-                      <option value="pro">Pro</option>
-                      <option value="custom">Custom</option>
+                      <option value="professional">Professional</option>
+                      <option value="enterprise">Enterprise</option>
                     </Select>
                   </div>
 
@@ -668,6 +697,86 @@ export default function ClientDetailPage() {
               ) : (
                 <div className="p-6"><EmptyState title="No administrative audit history" /></div>
               )}
+            </div>
+          </Card>
+        </div>
+      )}
+      {showPaymentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-dark/40 backdrop-blur-sm p-4">
+          <Card className="w-full max-w-md bg-white border border-slate-100 p-6 animate-fadeIn shadow-2xl">
+            <h3 className="font-display text-lg font-black text-brand-dark mb-2">Record License Payment</h3>
+            <p className="text-xs font-semibold text-slate-400 mb-4">
+              Extend the expiration date for this client terminal by recording a manual payment.
+            </p>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Billing Period</label>
+                <Select
+                  value={paymentMonths}
+                  onChange={(e) => setPaymentMonths(Number(e.target.value))}
+                >
+                  <option value={1}>1 Month (+30 Days)</option>
+                  <option value={3}>3 Months (+90 Days)</option>
+                  <option value={6}>6 Months (+180 Days)</option>
+                  <option value={12}>1 Year (+365 Days)</option>
+                </Select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Quote Amount (INR)</label>
+                {quoteQuery.isLoading ? (
+                  <div className="text-xs text-slate-400 py-1">Loading price quote...</div>
+                ) : (
+                  <Input
+                    type="number"
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(Number(e.target.value))}
+                    placeholder="Enter amount paid"
+                  />
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Payment Method</label>
+                <Select
+                  value={paymentProvider}
+                  onChange={(e) => setPaymentProvider(e.target.value)}
+                >
+                  <option value="manual">Cash / Direct Bank Transfer</option>
+                  <option value="razorpay">Razorpay</option>
+                  <option value="stripe">Stripe</option>
+                  <option value="gpay">GPay / PhonePe UPI</option>
+                </Select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Transaction ID / Reference (Optional)</label>
+                <Input
+                  type="text"
+                  value={paymentIdRef}
+                  onChange={(e) => setPaymentIdRef(e.target.value)}
+                  placeholder="Txn ID, receipt number, bank reference..."
+                />
+              </div>
+
+              <div className="flex gap-2.5 pt-3">
+                <Button
+                  className="flex-1"
+                  variant="primary"
+                  isLoading={recordPayment.isPending}
+                  onClick={() => recordPayment.mutate()}
+                >
+                  Record Payment
+                </Button>
+                <Button
+                  variant="secondary"
+                  disabled={recordPayment.isPending}
+                  onClick={() => setShowPaymentModal(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
             </div>
           </Card>
         </div>

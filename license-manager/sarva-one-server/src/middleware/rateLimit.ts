@@ -20,3 +20,13 @@ export const adminRateLimit = rateLimit({
     res.status(429).json(errorResponse("RATE_LIMITED", "Too many admin requests. Please try again soon."));
   }
 });
+
+export const loginRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 5, // Limit each IP to 5 login attempts per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => {
+    res.status(429).json(errorResponse("RATE_LIMITED", "Too many login attempts. Please try again after 15 minutes."));
+  }
+});

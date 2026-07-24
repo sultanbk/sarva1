@@ -9,7 +9,8 @@ import {
   Menu,
   X,
   UserRound,
-  Shield
+  Shield,
+  Activity
 } from 'lucide-react'
 import {
   Navigate,
@@ -37,6 +38,7 @@ import ClientsPage from './pages/ClientsPage'
 import ClientDetailPage from './pages/ClientDetailPage'
 import CreateLicensePage from './pages/CreateLicensePage'
 import SettingsPage from './pages/SettingsPage'
+import AuditLogPage from './pages/AuditLogPage'
 import { Button } from './components/ui'
 
 const queryClient = new QueryClient({
@@ -65,6 +67,7 @@ function AppShell() {
     '/clients': 'Licensing Records',
     '/clients/new': 'Generate Client License',
     '/settings': 'Console Configuration',
+    '/audit-log': 'Audit Trail Logs',
   }
   
   const title = location.pathname.startsWith('/clients/') && location.pathname !== '/clients/new' 
@@ -117,6 +120,7 @@ function AppShell() {
           <SidebarLink to="/" icon={<LayoutDashboard />} label="Dashboard" onClick={() => setOpen(false)} />
           <SidebarLink to="/clients" icon={<Store />} label="Clients List" onClick={() => setOpen(false)} />
           <SidebarLink to="/clients/new" icon={<Plus />} label="Generate Key" onClick={() => setOpen(false)} />
+          <SidebarLink to="/audit-log" icon={<Activity />} label="Audit Log" onClick={() => setOpen(false)} />
           <SidebarLink to="/settings" icon={<Settings />} label="Console Config" onClick={() => setOpen(false)} />
         </nav>
 
@@ -163,8 +167,13 @@ function AppShell() {
             <Menu className="h-4.5 w-4.5" />
           </Button>
           
-          <h1 className="min-w-0 flex-1 truncate font-display text-lg font-black tracking-tight text-brand-dark">
-            {title}
+          <h1 className="min-w-0 flex-1 truncate font-display text-lg font-black tracking-tight text-brand-dark flex items-center gap-3">
+            <span>{title}</span>
+            {import.meta.env.VITE_ENV_LABEL && import.meta.env.VITE_ENV_LABEL !== 'Production' && (
+              <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 border border-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-600 animate-pulse uppercase tracking-wider leading-none">
+                Staging: {import.meta.env.VITE_ENV_LABEL}
+              </span>
+            )}
           </h1>
 
           <div className="hidden items-center gap-2 rounded-xl bg-slate-50 border border-slate-100 px-3.5 py-2 text-xs font-bold text-slate-500 sm:flex">
@@ -233,6 +242,7 @@ export default function App() {
             <Route path="clients/new" element={<CreateLicensePage />} />
             <Route path="clients/:id" element={<ClientDetailPage />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="audit-log" element={<AuditLogPage />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
