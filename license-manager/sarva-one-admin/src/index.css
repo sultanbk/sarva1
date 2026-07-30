@@ -155,3 +155,30 @@ a {
 
 .chart-gradient-start-2 { stop-color: #0078f7; }
 .chart-gradient-stop-2 { stop-color: rgba(0, 120, 247, 0.05); }
+
+/* Toast slide-in animation */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(100%) translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) translateY(0);
+  }
+}
+
+/* Page transition */
+@keyframes pageEnter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-pageEnter {
+  animation: pageEnter 0.25s ease-out;
+}

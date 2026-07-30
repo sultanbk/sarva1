@@ -1,7 +1,8 @@
 import { useState } from 'react'
+import { useMutationToast } from '../hooks/useMutationToast'
 import type { FormEvent } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { Plus, Clipboard, MessageCircle, Check, Key, ShieldCheck } from 'lucide-react'
+import { Plus, Clipboard, MessageCircle, Check, Key, ShieldCheck, RotateCcw } from 'lucide-react'
 import { api } from '../lib'
 import type { Client, Plan } from '../lib'
 import { 
@@ -14,11 +15,12 @@ export default function CreateLicensePage() {
   const [copiedKey, setCopiedKey] = useState(false)
   const [customDuration, setCustomDuration] = useState(false)
 
-  const mutation = useMutation({
+  const mutation = useMutationToast({
     mutationFn: api.createClient,
     onSuccess: (data) => {
       setCreated(data)
     },
+    successMessage: (data) => `License key generated for ${data.shopName}`,
   })
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -44,6 +46,8 @@ export default function CreateLicensePage() {
     setTimeout(() => setCopiedKey(false), 1500)
   }
 
+  function resetForm() { setCreated(null); setCopiedKey(false) }
+
   const whatsappMessage = created 
     ? encodeURIComponent(`Welcome to Sarva One! Your license key is: ${created.licenseKey}
 Download link: https://sarvaone.com/download
@@ -52,7 +56,7 @@ Support Hotline: +91-XXXXXXXXXX`)
     : ''
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px] animate-fadeIn">
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
       {/* Create License Form */}
       <Card>
         <CardHeader title="Generate Client License" description="Establish a new licensing credentials for a Sarva One terminal." />
@@ -187,6 +191,10 @@ Support Hotline: +91-XXXXXXXXXX`)
                   >
                     <MessageCircle className="h-4 w-4 shrink-0" /> Share key via WhatsApp
                   </a>
+
+                  <Button className="w-full font-bold text-xs" variant="primary" onClick={resetForm}>
+                    <RotateCcw className="h-4 w-4" /> Create Another License
+                  </Button>
                 </div>
               </div>
             ) : (

@@ -77,6 +77,39 @@ export async function copyText(value: string) {
   await navigator.clipboard.writeText(value)
 }
 
+export function timeAgo(value?: string | null): string {
+  if (!value) return 'Never'
+  const now = Date.now()
+  const then = new Date(value).getTime()
+  if (Number.isNaN(then)) return 'Unknown'
+  const diff = now - then
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'Just now'
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `${days}d ago`
+  const months = Math.floor(days / 30)
+  return `${months}mo ago`
+}
+
+export type DaysRemaining = { days: number; label: string; urgent: boolean; warning: boolean; ok: boolean }
+
+export function daysRemaining(value?: string | null): DaysRemaining {
+  if (!value) return { days: 0, label: 'No expiry', urgent: false, warning: false, ok: true }
+  const now = Date.now()
+  const expiry = new Date(value).getTime()
+  if (Number.isNaN(expiry)) return { days: 0, label: 'Invalid date', urgent: false, warning: false, ok: true }
+  const diff = expiry - now
+  const days = Math.ceil(diff / 86400000)
+  if (days < 0) return { days, label: `Overdue by ${Math.abs(days)}d`, urgent: true, warning: false, ok: false }
+  if (days === 0) return { days, label: 'Expires today', urgent: true, warning: false, ok: false }
+  if (days <= 3) return { days, label: `${days}d remaining`, urgent: true, warning: false, ok: false }
+  if (days <= 14) return { days, label: `${days}d remaining`, urgent: false, warning: true, ok: false }
+  return { days, label: `${days}d remaining`, urgent: false, warning: false, ok: true }
+}
+
 export class ApiError extends Error {
   status: number
 

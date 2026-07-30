@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { KeyRound, Shield, Mail, Lock } from 'lucide-react'
-import { useMutation } from '@tanstack/react-query'
+import { useMutationToast } from '../hooks/useMutationToast'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { api, getToken, setToken } from '../lib'
 import { Button, Input, Card } from '../components/ui'
@@ -11,12 +11,13 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
 
-  const mutation = useMutation({
+  const mutation = useMutationToast({
     mutationFn: () => api.login(email, password),
     onSuccess: (data) => {
       setToken(data.token)
       navigate('/', { replace: true })
     },
+    errorMessage: (error) => error.message,
   })
 
   function submit(event: FormEvent) {

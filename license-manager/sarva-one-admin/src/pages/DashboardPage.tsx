@@ -2,7 +2,8 @@ import type { ReactNode } from 'react'
 import { CalendarClock, CheckCircle2, Clipboard, Globe, RefreshCcw, ShieldCheck, Store, UserCheck, Zap, MessageCircle } from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Area, AreaChart } from 'recharts'
 import { NavLink } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutationToast } from '../hooks/useMutationToast'
 import { api, formatDate, formatDateTime } from '../lib'
 import type { Client } from '../lib'
 import { Card, CardHeader, LoadingState, ErrorState, EmptyState, Button } from '../components/ui'
@@ -13,9 +14,10 @@ export default function DashboardPage() {
   const query = useQuery({ queryKey: ['dashboard'], queryFn: api.dashboard })
   const qc = useQueryClient()
   
-  const renew = useMutation({
+  const renew = useMutationToast({
     mutationFn: api.renew,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['dashboard'] }),
+    successMessage: 'License renewed successfully',
   })
 
   if (query.isLoading) return <LoadingState message="Retrieving licensing metrics" />
@@ -35,7 +37,7 @@ export default function DashboardPage() {
   ]
 
   return (
-    <div className="space-y-8 animate-fadeIn">
+    <div className="space-y-8">
       {/* Welcome Banner */}
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-gradient-to-r from-brand-dark to-brand-dark-light p-6 text-white shadow-lg">
         <div className="space-y-1">
@@ -133,7 +135,59 @@ export default function DashboardPage() {
         </ChartCard>
       </div>
 
-      {/* Row 2: Diagnostics & Usage */}
+      {/* License Status & Revenue Breakdown */}
+      <div className="grid gap-6 xl:grid-cols-4">
+        <Card className="p-5.5 xl:col-span-2">
+          <CardHeader title="License Status Overview" description="Current state distribution across all clients" />
+          <div className="h-56 px-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={[
+                  { name: 'Active', value: data.activeLicenses, fill: '#10b981' },
+                  { name: 'Expired', value: data.expiredLicenses, fill: '#ef4444' },
+                  { name: 'Other', value: Math.max(0, data.totalClients - data.activeLicenses - data.expiredLicenses), fill: '#94a3b8' },
+                ].filter(d => d.value > 0)} dataKey="value" nameKey="name" innerRadius={50} outerRadius={75} paddingAngle={3}>
+                  {['#10b981', '#ef4444', '#94a3b8'].map((color, i) => (<Cell key={i} fill={color} />))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="flex justify-center gap-6 pb-4 text-xs">
+            <span className="flex items-center gap-1.5 font-bold text-slate-600"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> Active {data.activeLicenses}</span>
+            <span className="flex items-center gap-1.5 font-bold text-slate-600"><span className="h-2.5 w-2.5 rounded-full bg-rose-500" /> Expired {data.expiredLicenses}</span>
+            <span className="flex items-center gap-1.5 font-bold text-slate-600"><span className="h-2.5 w-2.5 rounded-full bg-slate-400" /> Other {Math.max(0, data.totalClients - data.activeLicenses - data.expiredLicenses)}</span>
+          </div>
+        </Card>
+
+        <Card className="p-5.5">
+          <CardHeader title="Sync Coverage" description="Clients reporting vs silent" />
+          <div className="h-56 flex items-center justify-center">
+            <div className="text-center">
+              <p className="font-display text-5xl font-black text-brand-dark">{Math.round(data.reportingClients / data.totalClients * 100)}%</p>
+              <p className="mt-2 text-xs font-bold text-slate-400">{data.reportingClients} of {data.totalClients} clients</p>
+              <div className="mt-4 flex justify-center gap-1">
+                <div className="h-3 rounded-full bg-emerald-500" style={{ width: `${data.reportingClients / data.totalClients * 100}%`, maxWidth: 120 }} />
+                <div className="h-3 rounded-full bg-slate-200" style={{ width: `${(data.totalClients - data.reportingClients) / data.totalClients * 100}%`, maxWidth: 40 }} />
+              </div>
+              <p className="mt-1 text-[10px] font-bold text-slate-400">{data.clientsNeverSynced || 0} never synced</p>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-5.5">
+          <CardHeader title="Daily Activity" description="Bills generated today" />
+          <div className="h-56 flex items-center justify-center">
+            <div className="text-center">
+              <p className="font-display text-5xl font-black text-brand-dark">{data.billsToday.toLocaleString()}</p>
+              <p className="mt-2 text-xs font-bold text-slate-400">bills generated today</p>
+              <p className="mt-1 text-xs font-semibold text-slate-400">{data.totalBillsGenerated.toLocaleString()} total all-time</p>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Row 3: Diagnostics & Usage */}
       <div className="grid gap-6 xl:grid-cols-3">
         {/* Sync Health Status */}
         <ChartCard title="Sync Diagnostics" description="State distribution of last heartbeat checks">
@@ -209,7 +263,7 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Row 3: Actionable Alert Lists */}
+      {/* Row 4: Actionable Alert Lists */}
       <div className="grid gap-6 xl:grid-cols-3">
         <AlertList 
           title="Expiring Within 7 Days" 

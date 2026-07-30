@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Search, ChevronDown, ChevronUp } from 'lucide-react'
+import { Search, ChevronDown, ChevronUp, Activity, ShieldAlert, Key, UserCheck, CreditCard, Settings } from 'lucide-react'
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { api } from '../lib'
-import { Card, Input, Select, Button, LoadingState, ErrorState } from '../components/ui'
+import { Card, CardHeader, Input, Select, Button, ErrorState } from '../components/ui'
+import { TableSkeleton } from '../components/Skeletons'
 
 export default function AuditLogPage() {
   const [page, setPage] = useState(1)
@@ -24,7 +26,7 @@ export default function AuditLogPage() {
     queryFn: () => api.auditLog(params.toString()),
   })
 
-  if (isLoading) return <LoadingState message="Fetching console audit trails" />
+  if (isLoading) return <TableSkeleton rows={5} />
   if (isError || !data) return <ErrorState retry={() => refetch()} />
 
   const { events, pagination } = data
@@ -35,7 +37,7 @@ export default function AuditLogPage() {
   }
 
   return (
-    <div className="space-y-6 animate-fadeIn">
+    <div className="space-y-6">
       {/* Filtering and Search Controls */}
       <Card className="p-4.5">
         <div className="grid gap-3.5 md:grid-cols-[1fr_200px_200px]">
@@ -85,11 +87,40 @@ export default function AuditLogPage() {
         </div>
       </Card>
 
+      {/* Event Distribution Summary */}
+      {events.length > 0 && (() => {
+        const dist = new Map<string, number>()
+        events.forEach((e) => dist.set(e.eventType, (dist.get(e.eventType) || 0) + 1))
+        const chartData = Array.from(dist, ([type, count]) => ({ type: type.split('.').pop() ?? type, count }))
+          .sort((a, b) => b.count - a.count)
+        const colors = ['#0048eb', '#7c3aed', '#f59e0b', '#10b981', '#ef4444', '#0078f7', '#8b5cf6', '#ec4899']
+        return (
+          <Card>
+            <CardHeader title="Event Distribution" description="Event types on this page" />
+            <div className="h-40 px-6 pb-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                  <XAxis dataKey="type" tickLine={false} axisLine={false} />
+                  <YAxis tickLine={false} axisLine={false} allowDecimals={false} />
+                  <Tooltip />
+                  <Bar dataKey="count" radius={[4, 4, 0, 0]} barSize={28}>
+                    {chartData.map((_, i) => (
+                      <rect key={i} fill={colors[i % colors.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+        )
+      })()}
+
       {/* Main Audit Log Table Card */}
       <Card className="overflow-hidden border-slate-100">
-        <div className="overflow-x-auto">
+        <div className="overflow-auto max-h-[calc(100vh-18rem)]">
           <table className="w-full min-w-[900px] text-left border-collapse text-sm">
-            <thead>
+            <thead className="sticky top-0 z-10">
               <tr className="border-b border-slate-100 bg-slate-50/75 text-[11px] font-bold uppercase tracking-wider text-slate-400">
                 <th className="px-5.5 py-4 w-12"></th>
                 <th className="px-4 py-4 w-44">Timestamp</th>
@@ -161,9 +192,13 @@ export default function AuditLogPage() {
                           <td colSpan={6} className="px-10 py-4.5 border-t border-slate-100/50">
                             <div className="space-y-2">
                               <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Payload Metadata</p>
-                              <pre className="text-xs font-mono text-slate-600 bg-white border border-slate-100 p-4 rounded-xl overflow-x-auto shadow-inner leading-relaxed max-w-full">
-                                {JSON.stringify(event.metadata, null, 2)}
-                              </pre>
+                              {event.metadata && Object.keys(event.metadata).length > 0 ? (
+                                <pre className="text-xs font-mono text-slate-600 bg-white border border-slate-100 p-4 rounded-xl overflow-x-auto shadow-inner leading-relaxed max-w-full">
+                                  {JSON.stringify(event.metadata, null, 2)}
+                                </pre>
+                              ) : (
+                                <p className="text-xs font-medium text-slate-400 italic">No metadata recorded for this event.</p>
+                              )}
                             </div>
                           </td>
                         </tr>

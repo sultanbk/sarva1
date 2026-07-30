@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
+import { useMutationToast } from '../hooks/useMutationToast'
 import { 
   Save, Copy, RefreshCcw, ShieldAlert, Check, Server, 
   Terminal, ShieldCheck, Lock
@@ -21,8 +22,9 @@ export default function SettingsPage() {
     queryFn: api.apiKey 
   })
   
-  const password = useMutation({ 
-    mutationFn: api.changePassword 
+  const password = useMutationToast({
+    mutationFn: api.changePassword,
+    successMessage: 'Password updated successfully',
   })
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -44,7 +46,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-2 animate-fadeIn">
+    <div className="grid gap-6 xl:grid-cols-2">
       {/* Change Password Card */}
       <Card className="h-fit">
         <CardHeader title="Change Administrator Password" description="Update the credentials used to access the licensing console" />
@@ -81,20 +83,6 @@ export default function SettingsPage() {
               />
             </div>
           </div>
-
-          {password.isSuccess && (
-            <div className="flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-100 p-3.5 text-xs font-semibold text-emerald-700">
-              <ShieldCheck className="h-4.5 w-4.5 shrink-0" />
-              Administrator password updated successfully.
-            </div>
-          )}
-
-          {password.isError && (
-            <div className="flex items-center gap-2 rounded-lg bg-rose-50 border border-rose-100 p-3.5 text-xs font-semibold text-rose-600">
-              <ShieldAlert className="h-4.5 w-4.5 shrink-0" />
-              {password.error.message}
-            </div>
-          )}
 
           <Button className="font-bold text-xs" disabled={password.isPending} isLoading={password.isPending}>
             {!password.isPending && <Save className="h-4 w-4" />} Update Password

@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sarva One — Billing & Inventory Software for Indian Retail Shops</title>
+  <meta name="description" content="Complete billing, inventory, and GST management built for local retail shops in India. Works offline. One-time payment, no subscription.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%232563EB'/%3E%3Cstop offset='1' stop-color='%230B1120'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='url(%23g)'/%3E%3Ctext x='32' y='42' font-family='Arial' font-weight='800' font-size='26' fill='white' text-anchor='middle'%3ES1%3C/text%3E%3C/svg%3E">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Sarva One — Billing & Inventory Software for Retail Shops">
+  <meta property="og:description" content="Complete billing, inventory, and GST management built for local retail shops. Works offline. One-time payment.">
+  <meta property="og:url" content="https://sarva1.com">
+  <meta property="og:image" content="https://sarva1.com/og-image.jpg">
+  <meta property="og:locale" content="en_IN">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preload" href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Noto+Sans:wght@400;600;700&display=swap" as="style" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Noto+Sans:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@0.468.0" crossorigin="anonymous"></script>
+<style>
+:root {
+  --navy: #0B1120;
+  --navy-light: #1E293B;
+  --blue: #2563EB;
+  --blue-bright: #3B82F6;
+  --gold: #F59E0B;
+  --gold-light: #FCD34D;
+  --bg: #FFFFFF;
+  --bg-off: #F1F5F9;
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #94A3B8;
+  --success: #10B981;
+  --success-bg: #D1FAE5;
+  --error: #DC2626;
+  --error-bg: #FEE2E2;
+  --border: #E2E8F0;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
+  --shadow-sm: 0 1px 2px rgba(11,17,32,0.06);
+  --shadow-md: 0 4px 12px rgba(11,17,32,0.10);
+  --shadow-lg: 0 12px 32px rgba(11,17,32,0.14);
+  --shadow-xl: 0 24px 48px rgba(11,17,32,0.18);
+  --font-display: 'Manrope', sans-serif;
+  --font-body: 'Noto Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --transition: 200ms cubic-bezier(.4,0,.2,1);
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+html { scroll-behavior:smooth; }
+body { font-family:var(--font-body); color:var(--text-primary); background:var(--bg); line-height:1.6; -webkit-font-smoothing:antialiased; overflow-x:hidden; }
+img,svg { display:block; max-width:100%; }
+a { text-decoration:none; color:inherit; }
+a:focus-visible,button:focus-visible { outline:2px solid var(--gold); outline-offset:2px; border-radius:4px; }
+ul { list-style:none; }
+button { font-family:inherit; cursor:pointer; border:none; background:none; }
+.container { max-width:1200px; margin:0 auto; padding:0 24px; }
+section { padding:80px 0; }
+h1,h2,h3,h4 { font-family:var(--font-display); color:var(--navy); font-weight:700; line-height:1.25; }
+.eyebrow { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:var(--gold); background:#FEF3C7; padding:6px 14px; border-radius:var(--radius-full); margin-bottom:16px; letter-spacing:0.03em; }
+.eyebrow svg { width:14px; height:14px; }
+.section-head { text-align:center; max-width:640px; margin:0 auto 48px; }
+.section-head h2 { font-size:clamp(28px,4vw,38px); margin-bottom:12px; }
+.section-head p { color:var(--text-secondary); font-size:16px; }
+.btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; font-weight:600; font-size:15px; border-radius:var(--radius-md); padding:14px 26px; min-height:48px; white-space:nowrap; transition:transform var(--transition),box-shadow var(--transition),background var(--transition),border-color var(--transition); }
+.btn:hover { transform:translateY(-2px); }
+.btn-primary { background:var(--blue); color:#fff; box-shadow:var(--shadow-sm); }
+.btn-primary:hover { background:var(--blue-bright); box-shadow:var(--shadow-md); }
+.btn-gold { background:linear-gradient(135deg,var(--gold),#D97706); color:#fff; box-shadow:var(--shadow-sm); }
+.btn-gold:hover { box-shadow:var(--shadow-md); transform:translateY(-2px); }
+.btn-outline { background:transparent; color:#fff; border:1.5px solid rgba(255,255,255,0.4); }
+.btn-outline:hover { border-color:#fff; background:rgba(255,255,255,0.06); }
+.btn-white { background:#fff; color:var(--navy); }
+.btn-white:hover { box-shadow:var(--shadow-md); }
+.btn-block { width:100%; }
+.reveal { opacity:0; transform:translateY(24px); transition:opacity 700ms ease,transform 700ms ease; }
+.reveal.visible { opacity:1; transform:translateY(0); }
+
+/* NAV */
+header { position:fixed; top:0; left:0; right:0; z-index:1100; background:rgba(11,17,32,0.85); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); transition:box-shadow var(--transition),background var(--transition); }
+header.scrolled { background:rgba(11,17,32,0.95); box-shadow:0 2px 20px rgba(0,0,0,0.2); }
+.nav-inner { display:flex; align-items:center; justify-content:space-between; height:68px; gap:16px; }
+.logo { display:flex; align-items:center; gap:10px; font-family:var(--font-display); font-weight:700; font-size:18px; color:#fff; }
+.logo-img { height:32px; width:auto; flex-shrink:0; }
+.logo span { color:var(--gold); }
+.nav-links { display:flex; gap:32px; }
+.nav-links a { font-size:14px; font-weight:500; color:rgba(255,255,255,0.8); padding:6px 0; position:relative; transition:color var(--transition); }
+.nav-links a::after { content:''; position:absolute; left:0; bottom:0; height:2px; width:0; background:var(--gold); transition:width var(--transition); }
+.nav-links a:hover,.nav-links a.active { color:#fff; }
+.nav-links a:hover::after,.nav-links a.active::after { width:100%; }
+.nav-right { display:flex; align-items:center; gap:12px; }
+.hamburger { display:none; width:44px; height:44px; align-items:center; justify-content:center; color:#fff; }
+.mobile-menu { position:fixed; inset:0; background:var(--navy); z-index:1200; display:flex; flex-direction:column; padding:24px; transform:translateX(100%); transition:transform 300ms ease; }
+.mobile-menu.open { transform:translateX(0); }
+.mobile-menu-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:40px; }
+.mobile-menu a.mobile-link { font-family:var(--font-display); font-size:22px; font-weight:700; color:#fff; padding:16px 0; border-bottom:1px solid rgba(255,255,255,0.08); }
+.mobile-menu .btn { margin-top:32px; }
+
+/* HERO */
+.hero { position:relative; padding:160px 0 100px; overflow:hidden; background:linear-gradient(135deg,#0B1120 0%,#1E3A5F 50%,#0B1120 100%); }
+.hero-grid { display:grid; grid-template-columns:1fr 1fr; gap:48px; align-items:center; position:relative; z-index:1; }
+.hero h1 { font-size:clamp(32px,4.4vw,48px); color:#fff; letter-spacing:-0.01em; }
+.hero h1 .highlight { color:var(--gold); }
+.hero h1 .sub-head { display:block; font-size:0.55em; color:rgba(255,255,255,0.6); margin-top:10px; font-weight:500; font-family:var(--font-body); line-height:1.5; }
+.hero-sub { color:#94A3B8; font-size:16px; margin:20px 0 32px; max-width:480px; line-height:1.7; }
+.hero-ctas { display:flex; gap:14px; flex-wrap:wrap; margin-bottom:28px; }
+.trust-line { display:flex; gap:12px; flex-wrap:wrap; }
+.trust-line span { display:flex; align-items:center; gap:6px; font-size:12px; color:rgba(255,255,255,0.55); font-weight:500; background:rgba(255,255,255,0.06); padding:6px 14px; border-radius:var(--radius-full); border:1px solid rgba(255,255,255,0.08); }
+.trust-line svg { color:var(--gold); width:14px; height:14px; }
+.hero-visual { position:relative; }
+.mockup { background:#0F172A; border:1px solid rgba(255,255,255,0.1); border-radius:var(--radius-xl); box-shadow:0 32px 64px rgba(0,0,0,0.4); overflow:hidden; }
+.mockup-bar { background:#1E293B; padding:12px 16px; display:flex; gap:6px; border-bottom:1px solid rgba(255,255,255,0.06); }
+.mockup-bar span { width:10px; height:10px; border-radius:50%; background:#334155; }
+.mockup-bar span:first-child { background:#EF4444; }
+.mockup-bar span:nth-child(2) { background:#F59E0B; }
+.mockup-bar span:nth-child(3) { background:#10B981; }
+.hero-screen { aspect-ratio:16/11; display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg,#1E293B,#0F172A); padding:24px; }
+.hero-screen-inner { width:100%; }
+.hero-screen-top { display:flex; justify-content:space-between; margin-bottom:16px; }
+.hero-screen-top div { height:8px; border-radius:4px; background:linear-gradient(90deg,#2563EB,#3B82F6); opacity:0.5; }
+.hero-screen-top div:first-child { width:55%; }
+.hero-screen-top div:last-child { width:25%; background:linear-gradient(90deg,#334155,#475569); }
+.hero-screen-row { display:flex; gap:8px; margin-bottom:8px; }
+.hero-screen-row div { height:28px; border-radius:4px; background:rgba(255,255,255,0.03); flex:1; }
+.hero-screen-row div:first-child { flex:2; }
+.hero-screen-row div.colored { background:linear-gradient(90deg,rgba(37,99,235,0.25),rgba(37,99,235,0.05)); }
+.hero-screen-bottom { display:flex; gap:8px; margin-top:16px; }
+.hero-screen-bottom div { height:32px; border-radius:6px; flex:1; }
+.hero-screen-bottom div:first-child { background:linear-gradient(135deg,#2563EB,#1D4ED8); }
+.hero-screen-bottom div:last-child { background:rgba(255,255,255,0.05); }
+.float-card { position:absolute; background:#1E293B; border-radius:var(--radius-lg); box-shadow:0 8px 24px rgba(0,0,0,0.3); padding:12px 16px; display:flex; align-items:center; gap:10px; border:1px solid rgba(255,255,255,0.08); }
+.float-card .stat { font-family:var(--font-display); font-weight:700; font-size:16px; color:var(--gold); }
+.float-card .label { font-size:11px; color:rgba(255,255,255,0.5); }
+.float-1 { top:-6%; right:-6%; }
+.float-2 { bottom:16%; left:-8%; }
+.float-3 { bottom:-6%; right:10%; }
+
+/* PROOF */
+.proof { background:var(--bg-off); padding:36px 0; }
+.proof p { text-align:center; color:var(--text-muted); font-weight:600; font-size:13px; margin-bottom:16px; letter-spacing:0.02em; }
+.proof-strip { overflow:hidden; mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent); }
+.proof-track { display:flex; gap:48px; white-space:nowrap; font-family:var(--font-display); font-weight:700; color:var(--text-muted); font-size:14px; }
+
+/* PROBLEM */
+.problem-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:20px; }
+.problem-card { background:#fff; border:1px solid var(--border); border-radius:var(--radius-lg); padding:32px; transition:transform var(--transition),box-shadow var(--transition); }
+.problem-card:hover { transform:translateY(-4px); box-shadow:var(--shadow-md); }
+.problem-icon { width:48px; height:48px; border-radius:var(--radius-md); display:flex; align-items:center; justify-content:center; margin-bottom:18px; }
+.problem-icon.red { background:var(--error-bg); color:var(--error); }
+.problem-icon.amber { background:#FEF3C7; color:var(--gold); }
+.problem-icon.navy { background:#E9EFFD; color:var(--blue); }
+.problem-card h3 { font-size:18px; margin-bottom:8px; }
+.problem-card p { color:var(--text-secondary); font-size:14px; line-height:1.6; }
+.problem-transition { text-align:center; margin-top:40px; font-family:var(--font-display); font-weight:700; font-size:17px; color:var(--gold); }
+
+/* FEATURES */
+#features { background:var(--bg-off); }
+.features-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:20px; }
+.feat-card { background:#fff; border:1px solid var(--border); border-radius:var(--radius-lg); padding:28px; transition:transform var(--transition),box-shadow var(--transition); display:flex; flex-direction:column; }
+.feat-card:hover { transform:translateY(-4px); box-shadow:var(--shadow-md); }
+.feat-card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+.feat-icon-box { width:44px; height:44px; border-radius:var(--radius-md); background:#FEF3C7; color:var(--gold); display:flex; align-items:center; justify-content:center; }
+.feat-icon-box svg { width:22px; height:22px; }
+.feat-stat-badge { font-size:11px; font-weight:700; padding:4px 10px; border-radius:var(--radius-full); background:#FEF3C7; color:var(--gold); }
+.feat-card h3 { font-size:17px; margin-bottom:8px; }
+.feat-benefit { font-size:13.5px; color:var(--text-secondary); line-height:1.55; margin-bottom:14px; flex-grow:1; }
+.feat-bullets { display:flex; flex-direction:column; gap:8px; }
+.feat-bullets li { display:flex; align-items:flex-start; gap:8px; font-size:13px; color:var(--text-primary); }
+.feat-bullets svg { color:var(--success); width:16px; height:16px; flex-shrink:0; margin-top:3px; }
+.feat-bullets strong { font-weight:600; }
+
+/* TRUST */
+#trust-builders { background:#fff; border-top:1px solid var(--border); border-bottom:1px solid var(--border); }
+.trust-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; }
+.trust-card { background:var(--bg-off); border:1px solid var(--border); border-radius:var(--radius-md); padding:20px; text-align:center; transition:transform var(--transition),box-shadow var(--transition); }
+.trust-card:hover { transform:translateY(-2px); box-shadow:var(--shadow-sm); }
+.trust-icon-wrap { width:36px; height:36px; border-radius:50%; background:#FEF3C7; color:var(--gold); display:flex; align-items:center; justify-content:center; margin:0 auto 10px; }
+.trust-icon-wrap svg { width:18px; height:18px; }
+.trust-card h4 { font-size:14px; margin-bottom:4px; }
+.trust-card p { font-size:12.5px; color:var(--text-secondary); line-height:1.4; }
+
+/* HOW IT WORKS */
+.steps { display:grid; grid-template-columns:repeat(4,1fr); gap:20px; position:relative; }
+.steps::before { content:''; position:absolute; top:25px; left:10%; right:10%; height:2px; background:linear-gradient(90deg,var(--gold),var(--gold) 50%,var(--border) 50%); z-index:0; }
+.step { position:relative; z-index:1; text-align:center; }
+.step-num { width:50px; height:50px; border-radius:50%; background:linear-gradient(135deg,var(--gold),#D97706); color:#fff; display:flex; align-items:center; justify-content:center; margin:0 auto 14px; box-shadow:0 4px 12px rgba(245,158,11,0.3); font-family:var(--font-display); font-weight:800; font-size:18px; }
+.step h4 { font-size:16px; margin-bottom:6px; }
+.step p { color:var(--text-secondary); font-size:13.5px; line-height:1.5; }
+
+/* COMPARISON */
+.comp-section { background:var(--bg-off); }
+.comp-table-wrapper { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+.comp-table { width:100%; border-collapse:collapse; font-size:14px; min-width:600px; }
+.comp-table th { background:var(--navy); color:#fff; padding:14px 18px; text-align:left; font-weight:600; font-size:13px; white-space:nowrap; }
+.comp-table th:first-child { border-radius:var(--radius-md) 0 0 0; }
+.comp-table th:last-child { border-radius:0 var(--radius-md) 0 0; }
+.comp-table th.sarva-col { background:linear-gradient(135deg,#1E293B,var(--navy)); }
+.comp-table th.sarva-col span { color:var(--gold); }
+.comp-table td { padding:12px 18px; border-bottom:1px solid var(--border); color:var(--text-primary); }
+.comp-table tr:last-child td { border-bottom:none; }
+.comp-table tr:hover td { background:rgba(245,158,11,0.03); }
+.comp-table td:first-child { font-weight:500; }
+.comp-table td.check-col { color:var(--success); font-weight:600; }
+.comp-table td.partial-col { color:var(--gold); font-weight:600; }
+.comp-table td.cross-col { color:var(--text-muted); }
+.comp-table td.sarva-highlight { background:rgba(245,158,11,0.04); border-left:3px solid var(--gold); }
+.one-pitch-box { background:linear-gradient(135deg,var(--navy),#1E293B); border-radius:var(--radius-lg); padding:32px 36px; margin-top:32px; }
+.one-pitch-box p { color:rgba(255,255,255,0.85); font-size:14.5px; line-height:1.7; }
+.one-pitch-box strong { color:var(--gold); }
+
+/* SYSTEM REQS */
+.specs-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; max-width:900px; margin:0 auto; }
+.spec-card { background:#fff; border:1px solid var(--border); border-radius:var(--radius-md); padding:18px; display:flex; flex-direction:column; gap:6px; transition:box-shadow var(--transition),transform var(--transition); }
+.spec-card:hover { box-shadow:var(--shadow-md); transform:translateY(-2px); }
+.spec-icon { width:32px; height:32px; border-radius:var(--radius-sm); background:#FEF3C7; color:var(--gold); display:flex; align-items:center; justify-content:center; }
+.spec-icon svg { width:16px; height:16px; }
+.spec-card h4 { font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em; margin:0; }
+.spec-val { font-family:var(--font-display); font-size:14px; font-weight:700; color:var(--navy); }
+.spec-sub { font-size:12px; color:var(--text-muted); }
+.sysreq-card { max-width:700px; margin:32px auto 0; background:var(--bg-off); border:1px solid var(--border); border-radius:var(--radius-lg); padding:24px; display:flex; gap:20px; flex-wrap:wrap; }
+.sysreq-card-item { display:flex; gap:12px; flex:1; min-width:200px; }
+.sysreq-card-item svg { width:20px; height:20px; color:var(--gold); flex-shrink:0; margin-top:2px; }
+.sysreq-card-item strong { font-size:14px; display:block; margin-bottom:4px; }
+.sysreq-card-item p { font-size:13px; color:var(--text-secondary); line-height:1.5; }
+
+/* PRICING */
+#pricing { background:var(--bg-off); }
+.trial-banner { background:linear-gradient(135deg,var(--navy),#1E293B); border-radius:var(--radius-lg); padding:20px 28px; display:flex; align-items:center; justify-content:space-between; gap:20px; flex-wrap:wrap; margin-bottom:40px; }
+.trial-banner p { font-size:14px; color:rgba(255,255,255,0.85); font-weight:500; max-width:560px; line-height:1.5; }
+.pricing-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:20px; align-items:start; }
+.price-card { background:#fff; border-radius:var(--radius-lg); padding:32px 24px; position:relative; transition:transform var(--transition),box-shadow var(--transition); border:2px solid var(--border); display:flex; flex-direction:column; }
+.price-card:hover { transform:scale(1.02); box-shadow:var(--shadow-lg); }
+.price-card.popular { border-color:var(--gold); box-shadow:var(--shadow-md); }
+.price-card.enterprise { border-color:var(--navy); }
+.popular-badge { position:absolute; top:-14px; left:50%; transform:translateX(-50%); background:linear-gradient(135deg,var(--gold),#D97706); color:#fff; font-size:11px; font-weight:700; padding:5px 16px; border-radius:var(--radius-full); white-space:nowrap; }
+.price-card h3 { font-size:19px; margin-bottom:4px; }
+.price-fit { color:var(--text-secondary); font-size:13px; margin-bottom:20px; min-height:34px; }
+.price-amount { font-family:var(--font-display); font-size:30px; font-weight:800; color:var(--navy); }
+.price-period { font-size:12px; color:var(--text-muted); font-weight:500; margin-bottom:10px; }
+.price-amc { display:inline-block; font-size:11px; font-weight:700; padding:3px 10px; border-radius:var(--radius-full); margin-bottom:20px; background:var(--success-bg); color:var(--success); }
+.price-amc.optional { background:#FEF3C7; color:var(--gold); }
+.price-features { display:flex; flex-direction:column; gap:10px; margin-bottom:20px; flex-grow:1; }
+.price-features li { display:flex; align-items:flex-start; gap:8px; font-size:13.5px; }
+.price-features li.no { color:var(--text-muted); }
+.price-features svg.yes { color:var(--gold); width:16px; height:16px; flex-shrink:0; margin-top:3px; }
+.price-features svg.no { color:var(--border); width:16px; height:16px; flex-shrink:0; margin-top:3px; }
+.price-terms { font-size:11px; color:var(--text-muted); margin:-10px 0 14px; }
+.pricing-note { text-align:center; margin-top:36px; color:var(--text-secondary); font-size:14px; }
+.pricing-note a { color:var(--blue); font-weight:600; }
+
+/* TESTIMONIAL */
+.testimonial-card { background:linear-gradient(135deg,#0B1120,#1E3A5F); border-radius:var(--radius-xl); padding:48px; color:#fff; position:relative; overflow:hidden; }
+.testimonial-card::before { content:'"'; position:absolute; top:-5px; right:30px; font-family:var(--font-display); font-size:150px; color:rgba(255,255,255,0.04); line-height:1; }
+.testimonial-shop { font-weight:700; font-size:13px; opacity:0.6; margin-bottom:14px; letter-spacing:0.02em; text-transform:uppercase; }
+.testimonial-quote { font-family:var(--font-display); font-size:clamp(18px,2.4vw,24px); font-weight:600; line-height:1.4; margin-bottom:24px; position:relative; z-index:1; }
+.testimonial-name { font-weight:600; margin-bottom:20px; font-size:14px; }
+.testimonial-name span { opacity:0.6; font-weight:400; }
+.testimonial-stats { display:flex; gap:28px; flex-wrap:wrap; border-top:1px solid rgba(255,255,255,0.12); padding-top:20px; }
+.testimonial-stats div { font-size:13px; font-weight:600; opacity:0.85; }
+
+/* FAQ */
+#faq { background:var(--bg-off); }
+.faq-list { max-width:720px; margin:0 auto; display:flex; flex-direction:column; gap:10px; }
+.faq-item { border:1px solid var(--border); border-radius:var(--radius-md); overflow:hidden; background:#fff; }
+.faq-question { display:flex; align-items:center; justify-content:space-between; width:100%; padding:18px 22px; font-weight:600; font-size:15px; color:var(--navy); text-align:left; gap:12px; }
+.faq-question svg { transition:transform var(--transition); color:var(--gold); flex-shrink:0; }
+.faq-item.open .faq-question svg { transform:rotate(180deg); }
+.faq-answer { max-height:0; overflow:hidden; transition:max-height 300ms ease; }
+.faq-answer-inner { padding:0 22px 18px; color:var(--text-secondary); font-size:14px; line-height:1.6; }
+
+/* FINAL CTA */
+.final-cta { background:linear-gradient(135deg,#0B1120,#1E3A5F); text-align:center; padding:96px 0; }
+.final-cta h2 { color:#fff; font-size:clamp(28px,4vw,40px); margin-bottom:14px; }
+.final-cta p { color:#94A3B8; font-size:16px; margin-bottom:32px; }
+.final-cta-btns { display:flex; gap:14px; justify-content:center; flex-wrap:wrap; margin-bottom:40px; }
+.trust-icons { display:flex; gap:24px; justify-content:center; flex-wrap:wrap; color:#94A3B8; font-size:13px; font-weight:500; }
+.trust-icons span { display:flex; align-items:center; gap:6px; }
+
+/* FOOTER */
+footer { background:var(--navy); padding:56px 0 20px; border-top:1px solid rgba(255,255,255,0.06); }
+.footer-grid { display:grid; grid-template-columns:1.4fr 1fr 1fr; gap:40px; margin-bottom:40px; }
+.footer-tagline { color:#94A3B8; font-size:13px; margin:12px 0 4px; }
+.footer-domain { color:var(--gold); font-weight:600; font-size:13px; margin-bottom:16px; }
+.footer-social { display:flex; gap:10px; }
+.footer-social a { width:36px; height:36px; border-radius:50%; background:rgba(255,255,255,0.06); display:flex; align-items:center; justify-content:center; color:#94A3B8; transition:background var(--transition),color var(--transition); }
+.footer-social a:hover { background:var(--gold); color:var(--navy); }
+footer h5 { font-family:var(--font-display); font-size:14px; color:#fff; margin-bottom:16px; }
+.footer-links { display:flex; flex-direction:column; gap:10px; }
+.footer-links a { color:#94A3B8; font-size:13.5px; transition:color var(--transition); }
+.footer-links a:hover { color:var(--gold); }
+.footer-contact { display:flex; flex-direction:column; gap:10px; color:#94A3B8; font-size:13.5px; }
+.footer-contact div { display:flex; align-items:center; gap:8px; }
+.footer-contact svg { width:14px; height:14px; color:var(--gold); }
+.footer-bottom { border-top:1px solid rgba(255,255,255,0.06); padding-top:20px; text-align:center; color:#64748B; font-size:12.5px; }
+
+/* WHATSAPP FLOAT */
+.float-whatsapp { position:fixed; bottom:20px; right:20px; z-index:1050; width:52px; height:52px; border-radius:50%; background:linear-gradient(135deg,#25D366,#128C7E); display:flex; align-items:center; justify-content:center; color:#fff; box-shadow:0 6px 20px rgba(37,211,102,0.3); transition:transform var(--transition); }
+.float-whatsapp:hover { transform:scale(1.08); }
+.float-whatsapp svg { width:26px; height:26px; }
+
+/* RESPONSIVE */
+@media(max-width:1024px) { .features-grid { grid-template-columns:repeat(2,1fr); } .trust-grid { grid-template-columns:repeat(2,1fr); } }
+@media(max-width:900px) { .nav-links { display:none; } .hamburger { display:flex; } .hero-grid { grid-template-columns:1fr; } .hero { padding:120px 0 64px; } .hero-visual { margin-top:32px; } .float-card { display:none; } .problem-grid { grid-template-columns:1fr; } .steps { grid-template-columns:1fr; gap:36px; } .steps::before { display:none; } .step { display:flex; gap:14px; align-items:flex-start; text-align:left; } .step-num { margin:0; flex-shrink:0; } .pricing-grid { grid-template-columns:1fr; max-width:400px; margin:0 auto; } .footer-grid { grid-template-columns:1fr; gap:32px; } .specs-grid { grid-template-columns:repeat(2,1fr); } .trust-grid { grid-template-columns:repeat(2,1fr); } }
+@media(max-width:768px) { .features-grid { grid-template-columns:1fr; } .testimonial-card { padding:32px 24px; } }
+@media(max-width:600px) { .trust-grid { grid-template-columns:1fr; } section { padding:56px 0; } }
+@media(max-width:480px) { .container { padding:0 16px; } section { padding:44px 0; } .hero { padding:100px 0 48px; } .hero-ctas .btn { width:100%; } .final-cta-btns .btn { width:100%; } .specs-grid { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<header id="site-header">
+  <div class="container">
+    <div class="nav-inner">
+      <a href="#home" class="logo"><img src="sarvaone_logo.png" alt="Sarva One" class="logo-img"><span>Sarva</span> One</a>
+      <nav class="nav-links">
+        <a href="#features" class="nav-link">Features</a>
+        <a href="#pricing" class="nav-link">Pricing</a>
+        <a href="#how-it-works" class="nav-link">How It Works</a>
+        <a href="#faq" class="nav-link">FAQ</a>
+        <a href="#contact" class="nav-link">Contact</a>
+      </nav>
+      <div class="nav-right">
+        <a href="https://wa.me/919886718288?text=Hi%2C%20I%20want%20to%20book%20a%20free%20demo%20of%20Sarva%20One" target="_blank" rel="noopener" class="btn btn-gold">Book Free Demo</a>
+        <button class="hamburger" id="hamburger-btn" aria-label="Menu"><i data-lucide="menu" style="width:24px;height:24px;"></i></button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- MOBILE MENU -->
+<div class="mobile-menu" id="mobile-menu">
+  <div class="mobile-menu-top">
+    <span class="logo" style="color:#fff;"><span>Sarva</span> One</span>
+    <button id="close-menu-btn" aria-label="Close" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;color:#fff;"><i data-lucide="x" style="width:26px;height:26px;"></i></button>
+  </div>
+  <a href="#features" class="mobile-link nav-link">Features</a>
+  <a href="#pricing" class="mobile-link nav-link">Pricing</a>
+  <a href="#how-it-works" class="mobile-link nav-link">How It Works</a>
+  <a href="#faq" class="mobile-link nav-link">FAQ</a>
+  <a href="#contact" class="mobile-link nav-link">Contact</a>
+  <a href="https://wa.me/919886718288?text=Hi%2C%20I%20want%20to%20book%20a%20free%20demo%20of%20Sarva%20One" target="_blank" rel="noopener" class="btn btn-gold btn-block" style="margin-top:24px;">Book Free Demo</a>
+</div>
+
+<!-- HERO -->
+<section class="hero" id="home">
+  <div class="container">
+    <div class="hero-grid">
+      <div class="hero-text">
+        <h1>Billing Software Built for<br><span class="highlight">Indian Retail Shops</span><span class="sub-head">100% offline. Installed at your shop. No subscription.</span></h1>
+        <p class="hero-sub">Clear customer queues in seconds with keyboard billing and barcode scanning. GST auto-calculated. Get doorstep installation, printer setup, and staff training — all included.</p>
+        <div class="hero-ctas">
+          <a href="https://wa.me/919886718288?text=Hi%2C%20I%20want%20to%20book%20a%20free%20demo%20of%20Sarva%20One" target="_blank" rel="noopener" class="btn btn-gold btn-lg">📞 Book Free Demo</a>
+          <a href="#how-it-works" class="btn btn-outline btn-lg">See How It Works</a>
+        </div>
+        <div class="trust-line">
+          <span><i data-lucide="wifi-off"></i> 100% Offline</span>
+          <span><i data-lucide="check-circle"></i> One-Time Payment</span>
+          <span><i data-lucide="message-circle"></i> Personal WhatsApp Support</span>
+        </div>
+      </div>
+      <div class="hero-visual">
+        <div class="mockup">
+          <div class="mockup-bar"><span></span><span></span><span></span></div>
+          <div class="hero-screen">
+            <div class="hero-screen-inner">
+              <div class="hero-screen-top"><div></div><div></div></div>
+              <div class="hero-screen-row"><div></div><div class="colored"></div><div></div></div>
+              <div class="hero-screen-row"><div></div><div></div><div class="colored"></div></div>
+              <div class="hero-screen-row"><div class="colored"></div><div></div><div></div></div>
+              <div class="hero-screen-bottom"><div></div><div></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="float-card float-1"><div><div class="stat">₹0</div><div class="label">Setup cost for trial</div></div></div>
+        <div class="float-card float-2"><div><div class="stat">&lt;10s</div><div class="label">Avg bill time</div></div></div>
+        <div class="float-card float-3"><div><div class="stat">100%</div><div class="label">Offline uptime</div></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SOCIAL PROOF -->
+<section class="proof">
+  <div class="container">
+    <p>TRUSTED BY RETAIL SHOPS ACROSS KARNATAKA</p>
+    <div class="proof-strip">
+      <div class="proof-track">Krishnapriya Textiles · Sri Venkateshwara Traders · Ganesh General Stores · Bhat Brothers · Ramesh Electronics · Karnataka Wholesale · Sharada Medicals · Shanti Sarees · Jayalakshmi Stores · New Bharat Provisions</div>
+    </div>
+  </div>
+</section>
+
+<!-- PROBLEM -->
+<section id="problem">
+  <div class="container">
+    <div class="section-head reveal">
+      <span class="eyebrow"><i data-lucide="alert-triangle"></i> SOUND FAMILIAR?</span>
+      <h2>Every Shop Owner Faces These Problems</h2>
+      <p>You're not alone. Here's what we hear every day from shop owners like you.</p>
+    </div>
+    <div class="problem-grid reveal">
+      <div class="problem-card">
+        <div class="problem-icon red"><i data-lucide="clock"></i></div>
+        <h3>Hours Lost on Billing</h3>
+        <p>Writing bills by hand, calculating totals on a calculator, making mistakes. Your time deserves better than this.</p>
+      </div>
+      <div class="problem-card">
+        <div class="problem-icon amber"><i data-lucide="file-warning"></i></div>
+        <h3>GST Filing Every Month is Painful</h3>
+        <p>Digging through paper records, calculating tax manually, worrying about errors and penalties from the department.</p>
+      </div>
+      <div class="problem-card">
+        <div class="problem-icon navy"><i data-lucide="package"></i></div>
+        <h3>You Never Know Your Real Stock</h3>
+        <p>Overselling items you don't have. Guessing what's selling. Ordering wrong quantities from suppliers.</p>
+      </div>
+    </div>
+    <div class="problem-transition reveal">There's a better way →</div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="container">
+    <div class="section-head reveal">
+      <span class="eyebrow"><i data-lucide="zap"></i> POWERFUL FEATURES</span>
+      <h2>Everything Your Shop Needs</h2>
+      <p>One software. Six power-packed features. Built specifically for Indian retail.</p>
+    </div>
+    <div class="features-grid reveal">
+      <div class="feat-card">
+        <div class="feat-card-header">
+          <div class="feat-icon-box"><i data-lucide="keyboard"></i></div>
+          <span class="feat-stat-badge">Under 10 Seconds</span>
+        </div>
+        <h3>Lightning Keyboard Billing</h3>
+        <p class="feat-benefit">Clear rush-hour queues in seconds. Search products, apply discounts, split payments — without touching the mouse once.</p>
+        <ul class="feat-bullets">
+          <li><i data-lucide="check-circle-2"></i> <span><strong>Scan</strong> items with auto barcode detection</span></li>
+          <li><i data-lucide="check-circle-2"></i> <span>Full keyboard <strong>shortcuts</strong> for every action</span></li>
+          <li><i data-lucide="check-circle-2"></i> <span><strong>Park</strong> bills and resume them anytime</span></li>
+        </ul>
+      </div>
+      <div class="feat-card">
+        <div class="feat-card-header">
+          <div class="feat-icon-box"><i data-lucide="message-square"></i></div>
+          <span class="feat-stat-badge">Get Paid 3x Faster</span>
+        </div>
+        <h3>WhatsApp Invoices & Reminders</h3>
+        <p class="feat-benefit">Send PDF bills directly to customer WhatsApp. Auto-remind overdue credit balances — no awkward collection calls.</p>
+        <ul class="feat-bullets">
+          <li><i data-lucide="check-circle-2"></i> <span><strong>Send</strong> digital bills instantly after saving</span></li>
+          <li><i data-lucide="check-circle-2"></i> <span>Auto <strong>remind</strong> overdue customers</span></li>
+          <li><i data-lucide="check-circle-2"></i> <span><strong>Confirm</strong> payments with digital receipts</span></li>
+        </ul>
+      </div>
+      <div class="feat-card">
+        <div class="feat-card-header">
+          <div class="feat-icon-box"><i data-lucide="database"></i></div>
+          <span class="feat-stat-badge">100% Uptime</span>
+        </div>
+        <h3>Zero-Internet Local Database</h3>
+        <p class="feat-benefit">Your billing never stops when the internet goes down. All data stays on your computer — private, safe, always accessible.</p>
+        <ul class="feat-bullets">
+          <li><i data-lucide="check-circle-2"></i> <span><strong>No cloud lag</strong> — everything runs locally</span></li>
+          <li><i data-lucide="check-circle-2"></i> <span>100% <strong>data privacy</strong> on your machine</span></li>
+          <li><i data-lucide="check-circle-2"></i> <span>Optional <strong>Google Drive</strong> auto-backup</span></li>
+        </ul>
+      </div>
+      <div class="feat-card">
+        <div class="feat-card-header">
+          <div class="feat-icon-box"><i data-lucide="alert-triangle"></i></div>
+          <span class="feat-stat-badge">Stop Bad Debts</span>
+        </div>
+        <h3>Credit Risk & Aging Ledger</h3>
+        <p class="feat-benefit">Know exactly who's safe for credit and who needs to pay first. Risk badges alert your cashier at the counter.</p>
+        <ul class="feat-bullets">
+          <li><i data-lucide="check-circle-2"></i> <span>30/60/90+ day <strong>aging buckets</strong></span></li>
+          <li><i data-lucide="check-circle-2"></i> <span>Low/Medium/High <strong>risk badges</strong></span></li>
+          <li><i data-lucide="check-circle-2"></i> <span>Per-customer <strong>credit limits</strong></span></li>
+        </ul>
+      </div>
+      <div class="feat-card">
+        <div class="feat-card-header">
+          <div class="feat-icon-box"><i data-lucide="bar-chart-4"></i></div>
+          <span class="feat-stat-badge">Real Profits</span>
+        </div>
+        <h3>Daily True Profit Ledger</h3>
+        <p class="feat-benefit">Know your net earnings after deducting purchase costs and daily expenses. CA-ready reports in one click.</p>
+        <ul class="feat-bullets">
+          <li><i data-lucide="check-circle-2"></i> <span><strong>Net profit</strong> after COGS & expenses</span></li>
+          <li><i data-lucide="check-circle-2"></i> <span>1-click <strong>GSTR-1 export</strong> for your CA</span></li>
+          <li><i data-lucide="check-circle-2"></i> <span>Day-over-day <strong>profit comparisons</strong></span></li>
+        </ul>
+      </div>
+      <div class="feat-card">
+        <div class="feat-card-header">
+          <div class="feat-icon-box"><i data-lucide="user-check"></i></div>
+          <span class="feat-stat-badge">We Handle It</span>
+        </div>
+        <h3>Doorstep Setup & Training</h3>
+        <p class="feat-benefit">No technical skills needed. We visit your shop, install everything, configure your printer, and train your staff.</p>
+        <ul class="feat-bullets">
+          <li><i data-lucide="check-circle-2"></i> <span><strong>In-person visit</strong> for setup</span></li>
+          <li><i data-lucide="check-circle-2"></i> <span>Custom <strong>logo & branding</strong> on bills</span></li>
+          <li><i data-lucide="check-circle-2"></i> <span>Direct <strong>WhatsApp support</strong> always</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TRUST BUILDERS -->
+<section id="trust-builders">
+  <div class="container">
+    <div class="section-head reveal">
+      <span class="eyebrow"><i data-lucide="shield"></i> BUILT ON TRUST</span>
+      <h2>Why Local Retailers Trust Sarva One</h2>
+      <p>Your data, your shop, your peace of mind — that's what we protect.</p>
+    </div>
+    <div class="trust-grid reveal">
+      <div class="trust-card">
+        <div class="trust-icon-wrap"><i data-lucide="lock"></i></div>
+        <h4>100% Data Privacy</h4>
+        <p>Sales data stays strictly inside your shop computer. No online access, no leaks.</p>
+      </div>
+      <div class="trust-card">
+        <div class="trust-icon-wrap"><i data-lucide="cloud"></i></div>
+        <h4>Google Drive Backup</h4>
+        <p>Free auto-backup to your personal Drive. Even if your computer breaks, your data is safe.</p>
+      </div>
+      <div class="trust-card">
+        <div class="trust-icon-wrap"><i data-lucide="smile"></i></div>
+        <h4>Doorstep Support</h4>
+        <p>We visit your shop, set up the software, and train your team. No call centers.</p>
+      </div>
+      <div class="trust-card">
+        <div class="trust-icon-wrap"><i data-lucide="refresh-cw"></i></div>
+        <h4>1-Click Restore</h4>
+        <p>Accidentally deleted something? Restore your entire data in seconds.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how-it-works">
+  <div class="container">
+    <div class="section-head reveal">
+      <span class="eyebrow"><i data-lucide="arrow-right"></i> SIMPLE PROCESS</span>
+      <h2>Up and Running in One Day</h2>
+      <p>We handle everything — you just run your shop.</p>
+    </div>
+    <div class="steps reveal">
+      <div class="step">
+        <div class="step-num">1</div>
+        <h4>Talk to Us</h4>
+        <p>WhatsApp us or book a demo. We understand your shop's needs in a quick call.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <h4>We Come to Your Shop</h4>
+        <p>We visit, install the software, enter your stock, and configure your printer.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <h4>Your Team Learns in 2 Hours</h4>
+        <p>We train your staff. Most are billing confidently the same day.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <h4>Start Billing Immediately</h4>
+        <p>Go live the same day. We stay available on WhatsApp whenever you need us.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- COMPARISON -->
+<section class="comp-section" id="comparison">
+  <div class="container">
+    <div class="section-head reveal">
+      <span class="eyebrow"><i data-lucide="git-compare"></i> COMPETITOR COMPARISON</span>
+      <h2>How We Compare with Tally and Vyapar</h2>
+      <p>See why Sarva One is the easiest and most practical choice for your shop.</p>
+    </div>
+    <div class="comp-table-wrapper reveal">
+      <table class="comp-table">
+        <thead>
+          <tr>
+            <th>Feature / Capability</th>
+            <th class="sarva-col"><span>★ Sarva One</span></th>
+            <th>Vyapar</th>
+            <th>Tally</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>In-Person Shop Setup & Training</td><td class="check-col">✅ Yes — Doorstep visit included</td><td class="cross-col">❌ No — Self setup</td><td class="cross-col">❌ No — Third party dependent</td></tr>
+          <tr><td>100% Offline Database (SQLite)</td><td class="check-col">✅ Yes — Completely local</td><td class="partial-col">⚠️ Partial — Heavy cloud syncing</td><td class="check-col">✅ Yes — Local installation</td></tr>
+          <tr><td>Mouse-Free Keyboard Billing</td><td class="check-col">✅ Yes — Dedicated shortcuts</td><td class="cross-col">❌ No — Requires mouse</td><td class="check-col">✅ Yes — Keyboard navigation</td></tr>
+          <tr><td>WhatsApp Bill & Credit Integration</td><td class="check-col">✅ Yes — 1-click built in</td><td class="check-col">✅ Yes — Mobile app based</td><td class="cross-col">❌ No — External add-on needed</td></tr>
+          <tr><td>Customer Udhar Risk Scoring</td><td class="check-col">✅ Yes — Low/Med/High badges</td><td class="cross-col">❌ No — Balance total only</td><td class="cross-col">❌ No — Custom config needed</td></tr>
+          <tr><td>Automated Credit Aging Buckets</td><td class="check-col">✅ Yes — 30/60/90+ day</td><td class="cross-col">❌ No — Manual checking</td><td class="check-col">✅ Yes — Complex reports</td></tr>
+          <tr><td>Barcode Scanner Auto-Detection</td><td class="check-col">✅ Yes — Scan without clicking</td><td class="partial-col">⚠️ Partial — Needs focus</td><td class="partial-col">⚠️ Partial — Manual setup</td></tr>
+          <tr><td>Custom Shop Logo on Bills</td><td class="check-col">✅ Yes — White-labeled</td><td class="cross-col">❌ No — Watermark on free tier</td><td class="check-col">✅ Yes — Via TDL</td></tr>
+          <tr><td>Hold & Recall Multiple Bills</td><td class="check-col">✅ Yes — Park and resume</td><td class="cross-col">❌ No — Cannot park bills</td><td class="cross-col">❌ No — Complex steps</td></tr>
+          <tr><td>PIN Security & Role Audit Trail</td><td class="check-col">✅ Owner/Manager/Cashier</td><td class="partial-col">⚠️ Basic password lock</td><td class="check-col">✅ Yes — Complex controls</td></tr>
+          <tr><td>Automatic Google Drive Backup</td><td class="check-col">✅ Yes — Auto backups</td><td class="partial-col">⚠️ Cloud backup (paid)</td><td class="cross-col">❌ No — Manual backup</td></tr>
+          <tr><td>Real Daily Net Profit Dashboard</td><td class="check-col">✅ Sales − Costs − Expenses</td><td class="partial-col">⚠️ Basic gross income</td><td class="check-col">✅ Full P&L (needs CA)</td></tr>
+          <tr><td>Simple Non-Technical Interface</td><td class="check-col">✅ Built for all ages</td><td class="partial-col">⚠️ Moderate</td><td class="cross-col">❌ Needs accounting training</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="one-pitch-box reveal">
+      <p><strong>Tally</strong> is too complicated for counter billing, and online apps freeze when the internet slows down. <strong>Sarva One</strong> gives you keyboard billing speed, instant WhatsApp invoices, and credit risk warnings — all on your screen. Best part? <strong>We come to your shop, set everything up, and train your team.</strong></p>
+    </div>
+  </div>
+</section>
+
+<!-- SYSTEM REQUIREMENTS -->
+<section id="system-req" style="background:#fff;">
+  <div class="container">
+    <div class="section-head reveal">
+      <span class="eyebrow"><i data-lucide="monitor"></i> SYSTEM REQUIREMENTS</span>
+      <h2>What You Need to Run Sarva One</h2>
+      <p>Works on any Windows computer from the last 8 years. No expensive upgrades needed.</p>
+    </div>
+    <div class="specs-grid reveal">
+      <div class="spec-card"><div class="spec-icon"><i data-lucide="monitor"></i></div><h4>OS</h4><div class="spec-val">Windows 10 / 11</div><div class="spec-sub">64-bit required</div></div>
+      <div class="spec-card"><div class="spec-icon"><i data-lucide="zap"></i></div><h4>Processor</h4><div class="spec-val">Dual-core 2.0 GHz</div><div class="spec-sub">Quad-core 2.5 GHz+ recommended</div></div>
+      <div class="spec-card"><div class="spec-icon"><i data-lucide="server"></i></div><h4>Memory</h4><div class="spec-val">2 GB minimum</div><div class="spec-sub">4 GB+ recommended</div></div>
+      <div class="spec-card"><div class="spec-icon"><i data-lucide="hard-drive"></i></div><h4>Storage</h4><div class="spec-val">500 MB free</div><div class="spec-sub">2 GB (SSD) recommended</div></div>
+      <div class="spec-card"><div class="spec-icon"><i data-lucide="maximize-2"></i></div><h4>Display</h4><div class="spec-val">1366 × 768</div><div class="spec-sub">1920 × 1080 ideal</div></div>
+      <div class="spec-card"><div class="spec-icon"><i data-lucide="smartphone"></i></div><h4>Peripherals</h4><div class="spec-val">Barcode scanner</div><div class="spec-sub">Weighing scale supported</div></div>
+    </div>
+    <div class="sysreq-card reveal">
+      <div class="sysreq-card-item"><i data-lucide="wifi-off"></i><div><strong>No internet for daily use</strong><p>Billing, stock, reports — all work entirely offline.</p></div></div>
+      <div class="sysreq-card-item"><i data-lucide="tool"></i><div><strong>We handle setup</strong><p>Install, printer config, staff training — all included.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section id="pricing">
+  <div class="container">
+    <div class="section-head reveal">
+      <span class="eyebrow"><i data-lucide="indian-rupee"></i> SIMPLE PRICING</span>
+      <h2>Pay Once. Own It for Life.</h2>
+      <p>No subscription. No hidden fees. Just honest pricing.</p>
+    </div>
+    <div class="trial-banner reveal">
+      <p>📥 Try free for 30 days. Download now — no payment, no credit card. Activate your license only when you're ready.</p>
+      <a href="https://wa.me/919886718288?text=Hi%2C%20I%20want%20to%20download%20the%20free%20trial%20of%20Sarva%20One" target="_blank" rel="noopener" class="btn btn-gold">Download Free Trial</a>
+    </div>
+    <div class="pricing-grid reveal">
+      <div class="price-card">
+        <h3>Starter</h3>
+        <p class="price-fit">For shops that just need billing</p>
+        <div class="price-amount">₹15,000</div>
+        <div class="price-period">one-time · lifetime</div>
+        <span class="price-amc optional">AMC optional*</span>
+        <ul class="price-features">
+          <li><i data-lucide="check" class="yes"></i> Unlimited billing</li>
+          <li><i data-lucide="check" class="yes"></i> Thermal receipt printing</li>
+          <li><i data-lucide="check" class="yes"></i> Basic stock management</li>
+          <li><i data-lucide="check" class="yes"></i> GST billing</li>
+          <li><i data-lucide="check" class="yes"></i> PDF invoices</li>
+          <li><i data-lucide="check" class="yes"></i> 3 months WhatsApp support</li>
+          <li class="no"><i data-lucide="x" class="no"></i> Credit management</li>
+          <li class="no"><i data-lucide="x" class="no"></i> Analytics & reports</li>
+          <li class="no"><i data-lucide="x" class="no"></i> WhatsApp integration</li>
+        </ul>
+        <p class="price-terms">*Terms and conditions apply.</p>
+        <a href="https://wa.me/919886718288?text=Hi%2C%20I%27m%20interested%20in%20the%20Starter%20plan" target="_blank" rel="noopener" class="btn btn-secondary btn-block">Get Started</a>
+      </div>
+      <div class="price-card popular">
+        <span class="popular-badge">⭐ Most Popular</span>
+        <h3>Professional</h3>
+        <p class="price-fit">For growing shops with regular customers</p>
+        <div class="price-amount">₹25,000</div>
+        <div class="price-period">one-time · lifetime</div>
+        <span class="price-amc">1 year AMC included</span>
+        <ul class="price-features">
+          <li><i data-lucide="check" class="yes"></i> Everything in Starter</li>
+          <li><i data-lucide="check" class="yes"></i> Customer management</li>
+          <li><i data-lucide="check" class="yes"></i> Credit management</li>
+          <li><i data-lucide="check" class="yes"></i> WhatsApp bill sending</li>
+          <li><i data-lucide="check" class="yes"></i> Barcode labels</li>
+          <li><i data-lucide="check" class="yes"></i> Data export to Excel</li>
+          <li><i data-lucide="check" class="yes"></i> Google Drive backup</li>
+          <li><i data-lucide="check" class="yes"></i> 2 staff users</li>
+          <li><i data-lucide="check" class="yes"></i> Full GST reports</li>
+          <li class="no"><i data-lucide="x" class="no"></i> Advanced analytics</li>
+          <li class="no"><i data-lucide="x" class="no"></i> P&L reports</li>
+        </ul>
+        <a href="https://wa.me/919886718288?text=Hi%2C%20I%27m%20interested%20in%20the%20Professional%20plan" target="_blank" rel="noopener" class="btn btn-primary btn-block">Get Started</a>
+      </div>
+      <div class="price-card enterprise">
+        <h3>Enterprise</h3>
+        <p class="price-fit">Multi-branch shops &amp; custom needs</p>
+        <div class="price-amount">Contact Us</div>
+        <div class="price-period">&nbsp;</div>
+        <span class="price-amc">Custom AMC terms</span>
+        <ul class="price-features">
+          <li><i data-lucide="check" class="yes"></i> Everything in Professional</li>
+          <li><i data-lucide="check" class="yes"></i> Advanced customer analytics</li>
+          <li><i data-lucide="check" class="yes"></i> Credit aging reports</li>
+          <li><i data-lucide="check" class="yes"></i> Profit & Loss reports</li>
+          <li><i data-lucide="check" class="yes"></i> Audit trail</li>
+          <li><i data-lucide="check" class="yes"></i> Unlimited staff users</li>
+          <li><i data-lucide="check" class="yes"></i> Monthly on-site support</li>
+          <li><i data-lucide="check" class="yes"></i> Priority WhatsApp support</li>
+        </ul>
+        <a href="https://wa.me/919886718288?text=Hi%2C%20I%27m%20interested%20in%20the%20Enterprise%20plan" target="_blank" rel="noopener" class="btn btn-secondary btn-block">Contact Us</a>
+      </div>
+    </div>
+    <p class="pricing-note reveal">Need something custom? Running multiple branches? <a href="https://wa.me/919886718288?text=Hi%2C%20I%20have%20a%20custom%20requirement%20for%20Sarva%20One" target="_blank" rel="noopener">Talk to us about Custom →</a></p>
+  </div>
+</section>
+
+<!-- TESTIMONIAL -->
+<section id="testimonial">
+  <div class="container">
+    <div class="section-head reveal">
+      <span class="eyebrow"><i data-lucide="star"></i> REAL RESULTS</span>
+      <h2>Real Shop. Real Results.</h2>
+    </div>
+    <div class="testimonial-card reveal">
+      <div class="testimonial-shop">Krishnapriya Textiles, Shirahatti</div>
+      <p class="testimonial-quote">"Earlier billing used to take so long and GST filing was a headache every month. Now everything is automatic. I can focus on my customers instead of paperwork."</p>
+      <p class="testimonial-name">Puneet <span>— Owner, Krishnapriya Textiles</span></p>
+      <div class="testimonial-stats">
+        <div>⏱ 10 sec average bill time</div>
+        <div>📊 GST ready in 1 click</div>
+        <div>✅ Zero stock errors since install</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section id="faq">
+  <div class="container">
+    <div class="section-head reveal">
+      <span class="eyebrow"><i data-lucide="help-circle"></i> FAQ</span>
+      <h2>Questions You Might Have</h2>
+    </div>
+    <div class="faq-list reveal" id="faq-list">
+      <div class="faq-item"><button class="faq-question"><span>Will it work if my internet goes down?</span><i data-lucide="chevron-down"></i></button><div class="faq-answer"><div class="faq-answer-inner">Yes, completely. Sarva One works 100% offline. All billing, stock updates, and reports work without internet. Internet is only used for automatic background updates.</div></div></div>
+      <div class="faq-item"><button class="faq-question"><span>How long does installation take?</span><i data-lucide="chevron-down"></i></button><div class="faq-answer"><div class="faq-answer-inner">We come to your shop and complete the full setup in one day. This includes installation, entering your products and stock, and training your staff.</div></div></div>
+      <div class="faq-item"><button class="faq-question"><span>What if my computer breaks?</span><i data-lucide="chevron-down"></i></button><div class="faq-answer"><div class="faq-answer-inner">Your data is automatically backed up. We restore everything on your new computer within a few hours. Your data is never lost.</div></div></div>
+      <div class="faq-item"><button class="faq-question"><span>Is it difficult for my staff to learn?</span><i data-lucide="chevron-down"></i></button><div class="faq-answer"><div class="faq-answer-inner">Most staff learn billing in 2 hours. The billing screen is designed to be as simple as possible. We train everyone before we leave.</div></div></div>
+      <div class="faq-item"><button class="faq-question"><span>Does it handle GST properly for textiles?</span><i data-lucide="chevron-down"></i></button><div class="faq-answer"><div class="faq-answer-inner">Yes. CGST and SGST split automatically. HSN codes for textiles are built in. GSTR-1 ready reports are generated in one click.</div></div></div>
+      <div class="faq-item"><button class="faq-question"><span>Can I see it before I buy?</span><i data-lucide="chevron-down"></i></button><div class="faq-answer"><div class="faq-answer-inner">Absolutely. We do a live demo at your shop, on your computer, before you pay anything. You only pay after you are satisfied.</div></div></div>
+      <div class="faq-item"><button class="faq-question"><span>How does the 30-day free trial work?</span><i data-lucide="chevron-down"></i></button><div class="faq-answer"><div class="faq-answer-inner">Download Sarva One and use it free for 30 days — full features, no restrictions. After 30 days, you'll need a license key. Buy the plan that fits your shop and we'll send the key on WhatsApp.</div></div></div>
+      <div class="faq-item"><button class="faq-question"><span>What is AMC and do I have to pay it?</span><i data-lucide="chevron-down"></i></button><div class="faq-answer"><div class="faq-answer-inner">AMC (Annual Maintenance Contract) covers yearly updates and priority support. On Starter it's optional. On Professional, one year is included. It's never compulsory to keep using software you've already paid for.</div></div></div>
+      <div class="faq-item"><button class="faq-question"><span>What if I want to stop using it?</span><i data-lucide="chevron-down"></i></button><div class="faq-answer"><div class="faq-answer-inner">You can export all your data to Excel at any time. Your data always belongs to you. There's no subscription to cancel, no lock-in.</div></div></div>
+      <div class="faq-item"><button class="faq-question"><span>Why not just use Vyapar or Tally?</span><i data-lucide="chevron-down"></i></button><div class="faq-answer"><div class="faq-answer-inner">Vyapar and Tally are built for all businesses — not specifically for retail shops like yours. Sarva One is built specifically for Indian retail. And when something goes wrong, you WhatsApp us directly — not a call centre.</div></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- FINAL CTA -->
+<section class="final-cta" id="contact">
+  <div class="container">
+    <h2 class="reveal">Ready to Make Your Shop Smarter?</h2>
+    <p class="reveal">Talk to us today. Demo at your shop. Setup in one day.</p>
+    <div class="final-cta-btns reveal">
+      <a href="https://wa.me/919886718288?text=Hi%2C%20I%20want%20to%20book%20a%20free%20demo%20of%20Sarva%20One%20for%20my%20shop" target="_blank" rel="noopener" class="btn btn-gold btn-lg">📞 Book Free Demo on WhatsApp</a>
+      <a href="tel:+919886718288" class="btn btn-outline btn-lg">📞 Call +91 98867 18288</a>
+    </div>
+    <div class="trust-icons reveal">
+      <span>🔒 Your data is yours</span>
+      <span>📲 WhatsApp support</span>
+      <span>💳 One-time payment, no subscription</span>
+      <span>🇮🇳 Made in India</span>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="container">
+    <div class="footer-grid">
+      <div>
+        <a href="#home" class="logo"><img src="sarvaone_logo.png" alt="Sarva One" class="logo-img"><span>Sarva</span> One</a>
+        <p class="footer-tagline">Professional Software. Personal Support.</p>
+        <p class="footer-domain">sarva1.com</p>
+        <div class="footer-social">
+          <a href="https://wa.me/919886718288" target="_blank" rel="noopener" aria-label="WhatsApp"><i data-lucide="message-circle"></i></a>
+          <a href="tel:+919886718288" aria-label="Phone"><i data-lucide="phone"></i></a>
+        </div>
+      </div>
+      <div>
+        <h5>Quick Links</h5>
+        <div class="footer-links">
+          <a href="#features">Features</a>
+          <a href="#pricing">Pricing</a>
+          <a href="#how-it-works">How It Works</a>
+          <a href="#faq">FAQ</a>
+          <a href="#contact">Contact</a>
+        </div>
+      </div>
+      <div>
+        <h5>Contact</h5>
+        <div class="footer-contact">
+          <div><i data-lucide="message-circle"></i> +91 98867 18288</div>
+          <div><i data-lucide="map-pin"></i> Karnataka, India</div>
+          <div><i data-lucide="clock"></i> Support: 9am – 8pm, Mon–Sat</div>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom">© 2026 Sarva One. All rights reserved. Developed by Sultan Kabadi</div>
+  </div>
+</footer>
+
+<!-- WHATSAPP FLOAT -->
+<a href="https://wa.me/919886718288?text=Hi%2C%20I%20want%20to%20know%20more%20about%20Sarva%20One" target="_blank" rel="noopener" class="float-whatsapp" aria-label="Chat on WhatsApp"><i data-lucide="message-circle"></i></a>
+
+<script>
+// ---- Config ----
+const WHATSAPP_NUMBER = "919886718288";
+
+// ---- Lucide icons ----
+try { lucide.createIcons(); } catch(e) { /* icons are decorative, page works without them */ }
+
+// ---- Sticky nav ----
+const header = document.getElementById('site-header');
+window.addEventListener('scroll', () => {
+  header.classList.toggle('scrolled', window.scrollY > 12);
+}, { passive: true });
+
+// ---- Mobile menu ----
+document.getElementById('hamburger-btn').addEventListener('click', () => {
+  document.getElementById('mobile-menu').classList.add('open');
+});
+document.getElementById('close-menu-btn').addEventListener('click', () => {
+  document.getElementById('mobile-menu').classList.remove('open');
+});
+document.querySelectorAll('.mobile-link').forEach(a => {
+  a.addEventListener('click', () => document.getElementById('mobile-menu').classList.remove('open'));
+});
+
+// ---- Active nav link ----
+const navLinks = document.querySelectorAll('.nav-link');
+const sections = ['features', 'pricing', 'how-it-works', 'contact'].map(id => document.getElementById(id));
+function updateActiveLink() {
+  let current = '';
+  sections.forEach(sec => {
+    if (sec && window.scrollY >= sec.offsetTop - 140) current = sec.id;
+  });
+  navLinks.forEach(link => {
+    link.classList.toggle('active', link.getAttribute('href') === '#' + current);
+  });
+}
+window.addEventListener('scroll', updateActiveLink, { passive: true });
+
+// ---- Scroll reveal ----
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+      observer.unobserve(entry.target);
+    }
+  });
+}, { threshold: 0.15 });
+document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+// ---- FAQ accordion ----
+document.querySelectorAll('.faq-item').forEach(item => {
+  const question = item.querySelector('.faq-question');
+  const answer = item.querySelector('.faq-answer');
+  question.addEventListener('click', () => {
+    const isOpen = item.classList.contains('open');
+    document.querySelectorAll('.faq-item').forEach(other => {
+      other.classList.remove('open');
+      other.querySelector('.faq-answer').style.maxHeight = null;
+    });
+    if (!isOpen) {
+      item.classList.add('open');
+      answer.style.maxHeight = answer.scrollHeight + 'px';
+    }
+  });
+});
+
+// ---- Marquee ----
+const track = document.querySelector('.proof-track');
+if (track && track.scrollWidth > track.parentElement.clientWidth) {
+  track.innerHTML += track.innerHTML;
+  track.style.animation = 'marquee 18s linear infinite';
+  const style = document.createElement('style');
+  style.textContent = '@keyframes marquee { from { transform:translateX(0); } to { transform:translateX(-50%); } }';
+  document.head.appendChild(style);
+}
+</script>
+</body>
+</html>

@@ -1,10 +1,14 @@
-import { useState } from 'react'
+import { useState, useRef, useCallback } from 'react'
+import { useConfirmDialog } from '../hooks/useConfirmDialog.tsx'
 import { NavLink } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutationToast } from '../hooks/useMutationToast'
 import { Search, RotateCcw, Ban, RefreshCcw, Copy, Eye, Check, Download, Calendar } from 'lucide-react'
-import { api, copyText } from '../lib'
+import { api, copyText, timeAgo, daysRemaining } from '../lib'
 import type { Client } from '../lib'
-import { Card, Input, Select, PlanBadge, StatusBadge, Button, LoadingState, ErrorState } from '../components/ui'
+import { Card, Input, Select, PlanBadge, StatusBadge, Button, ErrorState } from '../components/ui'
+import { SortTh } from '../components/SortTh'
+import { TableSkeleton } from '../components/Skeletons'
 
 export default function ClientsPage() {
   const [search, setSearch] = useState('')
@@ -23,6 +27,7 @@ export default function ClientsPage() {
   // Bulk Extend Dialog State
   const [showBulkExtend, setShowBulkExtend] = useState(false)
   const [bulkMonths, setBulkMonths] = useState(1)
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>()
 
   const params = new URLSearchParams()
   params.set('page', String(page))
@@ -39,21 +44,21 @@ export default function ClientsPage() {
   
   const qc = useQueryClient()
 
-  const clientAction = useMutation({
+  const clientAction = useMutationToast({
     mutationFn: ({ id, action }: { id: string; action: 'suspend' | 'reactivate' | 'reset' }) =>
       action === 'suspend' ? api.suspend(id) : action === 'reactivate' ? api.reactivate(id) : api.resetMachine(id),
     onMutate: async ({ id, action }) => {
       await qc.cancelQueries({ queryKey: ['clients'] })
       const previous = qc.getQueryData<{ licenses: Client[]; pagination: any }>(['clients', params.toString()])
-      
+
       if (action !== 'reset' && previous) {
         qc.setQueryData<{ licenses: Client[]; pagination: any }>(['clients', params.toString()], (old) => {
           if (!old) return old
           return {
             ...old,
-            licenses: old.licenses.map((client) => 
-              client.id === id 
-                ? { ...client, status: action === 'suspend' ? 'suspended' : 'active' } 
+            licenses: old.licenses.map((client) =>
+              client.id === id
+                ? { ...client, status: action === 'suspend' ? 'suspended' : 'active' }
                 : client
             )
           }
@@ -67,16 +72,23 @@ export default function ClientsPage() {
       }
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ['clients'] }),
+    successMessage: (_, vars) =>
+      vars.action === 'suspend' ? 'License suspended' :
+      vars.action === 'reactivate' ? 'License reactivated' :
+      'Machine binding reset',
   })
 
-  const bulkExtendMutation = useMutation({
+  const bulkExtendMutation = useMutationToast({
     mutationFn: () => api.bulkExtend(selectedIds, bulkMonths),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['clients'] })
       setSelectedIds([])
       setShowBulkExtend(false)
-    }
+    },
+    successMessage: `Extended ${selectedIds.length} licenses by ${bulkMonths} month(s)`,
   })
+
+  const { confirm: confirmAction, dialog: confirmDialog } = useConfirmDialog()
 
   const triggerCopy = (id: string, key: string) => {
     copyText(key)
@@ -85,11 +97,14 @@ export default function ClientsPage() {
   }
 
   // Handle Search / Filter state updates and reset page to 1
-  const handleSearchChange = (val: string) => {
+  const handleSearchChange = useCallback((val: string) => {
     setSearch(val)
-    setPage(1)
-    setSelectedIds([])
-  }
+    clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      setPage(1)
+      setSelectedIds([])
+    }, 300)
+  }, [])
 
   const handlePlanChange = (val: string) => {
     setPlan(val)
@@ -152,7 +167,7 @@ export default function ClientsPage() {
     document.body.removeChild(link)
   }
 
-  if (query.isLoading) return <LoadingState message="Fetching active client terminals" />
+  if (query.isLoading) return <TableSkeleton rows={5} />
   if (query.isError || !query.data) return <ErrorState retry={() => query.refetch()} />
 
   const { licenses: clients, pagination } = query.data
@@ -160,7 +175,7 @@ export default function ClientsPage() {
   const allSelectedOnPage = clients.length > 0 && selectedIds.length === clients.length
 
   return (
-    <div className="space-y-6 animate-fadeIn">
+    <div className="space-y-6">
       {/* Action panel for selected rows */}
       {selectedIds.length > 0 && (
         <div className="bg-brand-primary/5 border border-brand-primary/20 rounded-xl p-4 flex items-center justify-between animate-fadeIn shadow-sm">
@@ -228,16 +243,16 @@ export default function ClientsPage() {
           </Select>
 
           <Button variant="secondary" onClick={handleCSVExport} className="flex items-center gap-1.5 justify-center">
-            <Download className="h-4 w-4" /> Export
+            <Download className="h-4 w-4" /> Export Page
           </Button>
         </div>
       </Card>
 
       {/* Main Clients Grid / Table Card */}
       <Card className="overflow-hidden border-slate-100">
-        <div className="overflow-x-auto">
+        <div className="overflow-auto max-h-[calc(100vh-18rem)]">
           <table className="w-full min-w-[1080px] text-left border-collapse text-sm">
-            <thead>
+            <thead className="sticky top-0 z-10">
               <tr className="border-b border-slate-100 bg-slate-50/75 text-[11px] font-bold uppercase tracking-wider text-slate-400">
                 <th className="px-4 py-4 w-12 text-center">
                   <input
@@ -247,13 +262,13 @@ export default function ClientsPage() {
                     className="rounded text-brand-primary focus:ring-brand-primary cursor-pointer h-4 w-4"
                   />
                 </th>
-                <th className="px-4 py-4">Shop details</th>
-                <th className="px-4 py-4">Owner name</th>
+                <SortTh field="shopName" sort={sort} onSort={setSort}>Shop details</SortTh>
+                <SortTh field="ownerName" sort={sort} onSort={setSort}>Owner name</SortTh>
                 <th className="px-4 py-4">Contact phone</th>
-                <th className="px-4 py-4">Service plan</th>
-                <th className="px-4 py-4">Licensing status</th>
-                <th className="px-4 py-4">Expiration date</th>
-                <th className="px-4 py-4">Last heartbeat</th>
+                <SortTh field="plan" sort={sort} onSort={setSort}>Service plan</SortTh>
+                <SortTh field="status" sort={sort} onSort={setSort}>Licensing status</SortTh>
+                <SortTh field="expiresAt" sort={sort} onSort={setSort}>Expiration date</SortTh>
+                <SortTh field="lastHeartbeatAt" sort={sort} onSort={setSort}>Last heartbeat</SortTh>
                 <th className="px-5.5 py-4 text-right">Actions</th>
               </tr>
             </thead>
@@ -293,31 +308,42 @@ export default function ClientsPage() {
                       <td className="px-4 py-4.5">
                         <StatusBadge status={client.status} />
                       </td>
-                      <td className="px-4 py-4.5 font-semibold text-slate-500">
-                        {new Date(client.expiresAt || '').toLocaleDateString('en-IN', {
-                          day: '2-digit',
-                          month: 'short',
-                          year: 'numeric'
-                        })}
+                      <td className="px-4 py-4.5">
+                        {(() => { const dr = daysRemaining(client.expiresAt)
+                          return (
+                            <div className="space-y-0.5">
+                              <p className="font-semibold text-slate-600 leading-none text-sm">
+                                {new Date(client.expiresAt || '').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                              </p>
+                              <span className={`inline-flex items-center gap-1 text-[10px] font-bold leading-none ${
+                                dr.urgent ? 'text-rose-600' : dr.warning ? 'text-amber-600' : 'text-emerald-600'
+                              }`}>
+                                <span className={`h-1.5 w-1.5 rounded-full ${
+                                  dr.urgent ? 'bg-rose-500' : dr.warning ? 'bg-amber-500' : 'bg-emerald-500'
+                                }`} />
+                                {dr.label}
+                              </span>
+                            </div>
+                          )
+                        })()}
                       </td>
                       <td className="px-4 py-4.5">
                         {client.lastHeartbeatAt ? (
                           <div className="space-y-0.5">
-                            <p className="font-semibold text-slate-600 leading-none">
-                              {new Date(client.lastHeartbeatAt).toLocaleDateString('en-IN', {
-                                day: '2-digit',
-                                month: 'short',
-                              })}
+                            <p className="font-semibold text-slate-600 leading-none text-sm">
+                              {timeAgo(client.lastHeartbeatAt)}
                             </p>
                             <p className="text-[10px] font-bold text-slate-400 leading-none">
-                              {new Date(client.lastHeartbeatAt).toLocaleTimeString('en-IN', {
-                                hour: '2-digit',
-                                minute: '2-digit'
+                              {new Date(client.lastHeartbeatAt).toLocaleDateString('en-IN', {
+                                day: '2-digit', month: 'short',
                               })}
                             </p>
                           </div>
                         ) : (
-                          <span className="text-xs font-bold text-slate-400">Never synced</span>
+                          <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-400">
+                            <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
+                            Never synced
+                          </span>
                         )}
                       </td>
                       <td className="px-5.5 py-4.5 text-right">
@@ -350,13 +376,16 @@ export default function ClientsPage() {
                             title={client.status === 'suspended' ? 'Reactivate licensing privileges' : 'Suspend client license'}
                             variant="secondary" 
                             className="h-9 w-9 p-0" 
-                            onClick={() => {
-                              if (client.status === 'suspended' || window.confirm(`Suspend license for ${client.shopName}? The shop will lose access immediately.`)) {
-                                clientAction.mutate({ 
-                                  id: client.id, 
-                                  action: client.status === 'suspended' ? 'reactivate' : 'suspend' 
-                                })
+                            onClick={async () => {
+                              if (client.status === 'suspended') {
+                                clientAction.mutate({ id: client.id, action: 'reactivate' })
+                                return
                               }
+                              const ok = await confirmAction(
+                                `Suspend license for ${client.shopName}? The shop will lose access immediately.`,
+                                { title: 'Suspend License', variant: 'danger', confirmLabel: 'Suspend' }
+                              )
+                              if (ok) clientAction.mutate({ id: client.id, action: 'suspend' })
                             }}
                           >
                             {client.status === 'suspended' ? (
@@ -371,10 +400,12 @@ export default function ClientsPage() {
                             title="Reset machine hardware binding"
                             variant="secondary" 
                             className="h-9 w-9 p-0" 
-                            onClick={() => {
-                              if (window.confirm(`Reset machine hardware binding for ${client.shopName}? They will need to re-activate on their next startup.`)) {
-                                clientAction.mutate({ id: client.id, action: 'reset' })
-                              }
+                            onClick={async () => {
+                              const ok = await confirmAction(
+                                `Reset machine hardware binding for ${client.shopName}? They will need to re-activate on their next startup.`,
+                                { title: 'Reset Machine Binding', variant: 'warning', confirmLabel: 'Reset' }
+                              )
+                              if (ok) clientAction.mutate({ id: client.id, action: 'reset' })
                             }}
                           >
                             <RefreshCcw className="h-4 w-4 text-amber-600" />
@@ -465,6 +496,7 @@ export default function ClientsPage() {
           </Card>
         </div>
       )}
+      {confirmDialog}
     </div>
   )
 }

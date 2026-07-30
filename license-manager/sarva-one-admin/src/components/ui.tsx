@@ -111,39 +111,69 @@ export function Button({
 }
 
 // 4. Reusable Inputs
-export function Input({ className, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
+export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+  error?: string
+}
+export function Input({ className, error, ...props }: InputProps) {
   return (
-    <input
-      {...props}
-      className={cn(
-        'w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-medium text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-brand-secondary focus:ring-4 focus:ring-brand-secondary/15',
-        className
-      )}
-    />
+    <div>
+      <input
+        {...props}
+        className={cn(
+          'w-full rounded-lg border bg-white px-3.5 py-2.5 text-sm font-medium text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:ring-4',
+          error
+            ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-500/15'
+            : 'border-slate-200 focus:border-brand-secondary focus:ring-brand-secondary/15',
+          className
+        )}
+        aria-invalid={!!error}
+      />
+      {error && <p className="mt-1 text-xs font-semibold text-rose-600">{error}</p>}
+    </div>
   )
 }
 
-export function Select({ className, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) {
+export interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
+  error?: string
+}
+export function Select({ className, error, ...props }: SelectProps) {
   return (
-    <select
-      {...props}
-      className={cn(
-        'w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-medium text-slate-900 outline-none transition-all focus:border-brand-secondary focus:ring-4 focus:ring-brand-secondary/15 appearance-none bg-[url("data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22none%22%3E%3Cpath%20d%3D%22M7%209l3%203%203-3%22%20stroke%3D%22%2364748b%22%20stroke-width%3D%221.5%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E")] bg-[length:1.25rem_1.25rem] bg-[right_0.75rem_center] bg-no-repeat pr-10',
-        className
-      )}
-    />
+    <div>
+      <select
+        {...props}
+        className={cn(
+          'w-full rounded-lg border bg-white px-3.5 py-2.5 text-sm font-medium text-slate-900 outline-none transition-all focus:ring-4 appearance-none bg-[url("data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22none%22%3E%3Cpath%20d%3D%22M7%209l3%203%203-3%22%20stroke%3D%22%2364748b%22%20stroke-width%3D%221.5%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E")] bg-[length:1.25rem_1.25rem] bg-[right_0.75rem_center] bg-no-repeat pr-10',
+          error
+            ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-500/15'
+            : 'border-slate-200 focus:border-brand-secondary focus:ring-brand-secondary/15',
+          className
+        )}
+        aria-invalid={!!error}
+      />
+      {error && <p className="mt-1 text-xs font-semibold text-rose-600">{error}</p>}
+    </div>
   )
 }
 
-export function Textarea({ className, ...props }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+export interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
+  error?: string
+}
+export function Textarea({ className, error, ...props }: TextareaProps) {
   return (
-    <textarea
-      {...props}
-      className={cn(
-        'w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-medium text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-brand-secondary focus:ring-4 focus:ring-brand-secondary/15 min-h-[100px] resize-y',
-        className
-      )}
-    />
+    <div>
+      <textarea
+        {...props}
+        className={cn(
+          'w-full rounded-lg border bg-white px-3.5 py-2.5 text-sm font-medium text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:ring-4 min-h-[100px] resize-y',
+          error
+            ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-500/15'
+            : 'border-slate-200 focus:border-brand-secondary focus:ring-brand-secondary/15',
+          className
+        )}
+        aria-invalid={!!error}
+      />
+      {error && <p className="mt-1 text-xs font-semibold text-rose-600">{error}</p>}
+    </div>
   )
 }
 

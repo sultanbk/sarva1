@@ -1,25 +1,28 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { useConfirmDialog } from '../hooks/useConfirmDialog.tsx'
 import { useParams, useNavigate, NavLink } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutationToast } from '../hooks/useMutationToast'
 import { 
   ArrowLeft, Ban, RotateCcw, CalendarClock, RefreshCcw, Copy, Trash2, 
   Cpu, HardDrive, CpuIcon, Layers, Laptop, ShieldCheck, 
-  Activity, Info, Save, Clock, Check
+  Activity, Info, Save, Clock, Check, CreditCard, DollarSign
 } from 'lucide-react'
-import { api, formatDate, formatDateTime, copyText } from '../lib'
+import { api, formatDate, formatDateTime, formatCurrency, copyText, timeAgo, daysRemaining } from '../lib'
 import type { ClientDetail, Plan } from '../lib'
-import { 
-  Card, CardHeader, PlanBadge, StatusBadge, Button, 
-  Input, Select, Textarea, LoadingState, ErrorState, EmptyState 
+import {
+  Card, CardHeader, PlanBadge, StatusBadge, Button,
+  Input, Select, ErrorState, EmptyState
 } from '../components/ui'
 import { Line, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { DetailSkeleton } from '../components/Skeletons'
 
 export default function ClientDetailPage() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
   const qc = useQueryClient()
   
-  const [activeTab, setActiveTab] = useState<'overview' | 'diagnostics' | 'devices' | 'history'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'diagnostics' | 'devices' | 'history' | 'payments'>('overview')
   const [copiedKey, setCopiedKey] = useState(false)
 
   const query = useQuery({ 
@@ -28,7 +31,7 @@ export default function ClientDetailPage() {
     enabled: Boolean(id) 
   })
 
-  const update = useMutation({
+  const update = useMutationToast({
     mutationFn: (payload: Partial<ClientDetail>) => api.updateClient(id, payload),
     onMutate: async (payload) => {
       await qc.cancelQueries({ queryKey: ['client', id] })
@@ -42,51 +45,58 @@ export default function ClientDetailPage() {
       }
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ['client', id] }),
+    successMessage: 'Client record updated',
   })
 
-  const remove = useMutation({
+  const remove = useMutationToast({
     mutationFn: () => api.deleteClient(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['clients'] })
       qc.invalidateQueries({ queryKey: ['dashboard'] })
       navigate('/clients')
     },
+    successMessage: 'Client license archived',
   })
 
-  const reset = useMutation({
+  const reset = useMutationToast({
     mutationFn: () => api.resetMachine(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['client', id] })
       qc.invalidateQueries({ queryKey: ['clients'] })
     },
+    successMessage: 'Machine binding reset',
   })
 
-  const deactivateMachine = useMutation({
+  const deactivateMachine = useMutationToast({
     mutationFn: (activationId: string) => api.deactivateMachine(id, activationId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['client', id] })
     },
+    successMessage: 'Seat deactivated',
   })
 
-  const blockMachine = useMutation({
+  const blockMachine = useMutationToast({
     mutationFn: (activationId: string) => api.blockMachine(id, activationId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['client', id] })
     },
+    successMessage: 'Hardware blocked',
   })
 
-  const unblockMachine = useMutation({
+  const unblockMachine = useMutationToast({
     mutationFn: (activationId: string) => api.unblockMachine(id, activationId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['client', id] })
     },
+    successMessage: 'Hardware unblocked',
   })
 
-  const reactivate = useMutation({
+  const reactivate = useMutationToast({
     mutationFn: () => api.reactivate(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['client', id] })
     },
+    successMessage: 'License reactivated',
   })
 
   // Payment / Renewal Modal States
@@ -108,7 +118,7 @@ export default function ClientDetailPage() {
     }
   }, [quoteQuery.data])
 
-  const recordPayment = useMutation({
+  const recordPayment = useMutationToast({
     mutationFn: () => api.recordManualPayment(id, {
       amount: paymentAmount,
       months: paymentMonths,
@@ -119,7 +129,8 @@ export default function ClientDetailPage() {
       qc.invalidateQueries({ queryKey: ['client', id] })
       setShowPaymentModal(false)
       setPaymentIdRef('')
-    }
+    },
+    successMessage: 'Payment recorded successfully',
   })
 
   const handleCopyKey = (key: string) => {
@@ -128,14 +139,69 @@ export default function ClientDetailPage() {
     setTimeout(() => setCopiedKey(false), 1500)
   }
 
-  if (query.isLoading) return <LoadingState message="Connecting to client endpoint" />
+  const { confirm: confirmAction, dialog: confirmDialog } = useConfirmDialog()
+  function DebouncedSeatsInput({
+    value, onChange, disabled
+  }: {
+    value: number; onChange: (val: number) => void; disabled: boolean
+  }) {
+    const [local, setLocal] = useState(value)
+    const ref = useRef(value)
+    useEffect(() => { setLocal(value); ref.current = value }, [value])
+    const onBlur = () => {
+      if (local !== ref.current && local >= 1 && local <= 99) onChange(local)
+    }
+    return (
+      <Input type="number" min="1" max="99" value={local}
+        onChange={(e) => setLocal(Number(e.target.value || 1))}
+        onBlur={onBlur} disabled={disabled} />
+    )
+  }
+
+  function AutoSaveTextarea({
+    defaultValue, onSave, disabled
+  }: {
+    defaultValue: string; onSave: (val: string) => void; disabled: boolean
+  }) {
+    const [value, setValue] = useState(defaultValue)
+    const [saving, setSaving] = useState(false)
+    const timerRef = useRef<ReturnType<typeof setTimeout>>()
+    useEffect(() => { setValue(defaultValue ?? '') }, [defaultValue])
+    const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      setValue(e.target.value)
+      clearTimeout(timerRef.current)
+      timerRef.current = setTimeout(() => {
+        if (e.target.value !== (defaultValue ?? '')) {
+          setSaving(true)
+          onSave(e.target.value)
+          setTimeout(() => setSaving(false), 600)
+        }
+      }, 1500)
+    }
+    return (
+      <div className="relative">
+        <textarea className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-medium text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-brand-secondary focus:ring-4 focus:ring-brand-secondary/15 min-h-[100px] resize-y"
+          value={value} onChange={handleChange} disabled={disabled}
+          placeholder="Enter account remarks here... (auto-saves 1.5s after typing stops)" />
+        <div className="pointer-events-none absolute bottom-3 right-3 flex items-center gap-1 text-[10px] font-bold text-slate-400">
+          {saving ? (
+            <span className="flex items-center gap-1"><span className="h-2 w-2 animate-ping rounded-full bg-amber-400" /> Saving...</span>
+          ) : (
+            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-400" /> Auto-save ready</span>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  if (query.isLoading) return <DetailSkeleton />
   if (query.isError || !query.data) return <ErrorState retry={() => query.refetch()} />
 
   const client = query.data
   const latestHeartbeat = client.heartbeats?.[0]
 
   return (
-    <div className="space-y-6 animate-fadeIn">
+    <div className="space-y-6">
       {/* Header Back Button & Brief Profile */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
         <div className="flex items-center gap-4">
@@ -202,6 +268,16 @@ export default function ClientDetailPage() {
         >
           <Clock className="h-4.5 w-4.5" /> Timelines & Logs
         </button>
+        <button
+          onClick={() => setActiveTab('payments')}
+          className={`flex items-center gap-2 border-b-2 px-5 py-3.5 text-sm font-bold tracking-tight transition outline-none ${
+            activeTab === 'payments'
+              ? 'border-brand-primary text-brand-primary'
+              : 'border-transparent text-slate-400 hover:text-slate-700'
+          }`}
+        >
+          <CreditCard className="h-4.5 w-4.5" /> Payments
+        </button>
       </div>
 
       {/* Tab Panels */}
@@ -243,6 +319,28 @@ export default function ClientDetailPage() {
                   <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Expiration Date</span>
                   <span className="text-sm font-semibold text-slate-800">{formatDate(client.expiresAt)}</span>
                 </div>
+                <div className="grid grid-cols-[130px_1fr] py-3.5">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Days Remaining</span>
+                  <span>{(() => { const dr = daysRemaining(client.expiresAt); return (
+                    <span className={`inline-flex items-center gap-1.5 text-sm font-bold ${
+                      dr.urgent ? 'text-rose-600' : dr.warning ? 'text-amber-600' : 'text-emerald-600'
+                    }`}>
+                      <span className={`h-2 w-2 rounded-full ${
+                        dr.urgent ? 'bg-rose-500 animate-pulse' : dr.warning ? 'bg-amber-500' : 'bg-emerald-500'
+                      }`} />
+                      {dr.label}
+                    </span>
+                  )})()}</span>
+                </div>
+                {client.graceEndsAt && (
+                  <div className="grid grid-cols-[130px_1fr] py-3.5">
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Grace Ends</span>
+                    <span className="inline-flex items-center gap-1.5 text-sm font-bold text-amber-600">
+                      <span className="h-2 w-2 rounded-full bg-amber-500" />
+                      {formatDate(client.graceEndsAt)} ({timeAgo(client.graceEndsAt)})
+                    </span>
+                  </div>
+                )}
               </div>
             </Card>
 
@@ -276,10 +374,12 @@ export default function ClientDetailPage() {
                   <Button 
                     variant="secondary" 
                     className="justify-start text-left cursor-pointer"
-                    onClick={() => {
-                      if (window.confirm(`Suspend license for ${client.shopName}? The shop will lose access immediately.`)) {
-                        update.mutate({ status: 'suspended' })
-                      }
+                    onClick={async () => {
+                      const ok = await confirmAction(
+                        `Suspend license for ${client.shopName}? The shop will lose access immediately.`,
+                        { title: 'Suspend License', variant: 'danger', confirmLabel: 'Suspend' }
+                      )
+                      if (ok) update.mutate({ status: 'suspended' })
                     }}
                     disabled={update.isPending}
                   >
@@ -311,10 +411,12 @@ export default function ClientDetailPage() {
                   <Button 
                     variant="secondary" 
                     className="justify-start text-left cursor-pointer"
-                    onClick={() => {
-                      if (window.confirm(`Reset machine binding for ${client.shopName}?`)) {
-                        reset.mutate()
-                      }
+                    onClick={async () => {
+                      const ok = await confirmAction(
+                        `Reset machine binding for ${client.shopName}?`,
+                        { title: 'Reset Machine Binding', variant: 'warning', confirmLabel: 'Reset' }
+                      )
+                      if (ok) reset.mutate()
                     }}
                     isLoading={reset.isPending}
                   >
@@ -327,7 +429,18 @@ export default function ClientDetailPage() {
                     <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Update Service Tier</label>
                     <Select
                       value={client.plan}
-                      onChange={(e) => update.mutate({ plan: e.target.value as Plan })}
+                      onChange={async (e) => {
+                        const newPlan = e.target.value as Plan
+                        const planRank = { starter: 0, professional: 1, enterprise: 2 }
+                        if (planRank[newPlan] < planRank[client.plan]) {
+                          const ok = await confirmAction(
+                            `Downgrade from ${client.plan} to ${newPlan}? This may reduce available features.`,
+                            { title: 'Downgrade Plan', variant: 'warning', confirmLabel: 'Downgrade' }
+                          )
+                          if (!ok) return
+                        }
+                        update.mutate({ plan: newPlan })
+                      }}
                       disabled={update.isPending}
                     >
                       <option value="starter">Starter</option>
@@ -338,12 +451,9 @@ export default function ClientDetailPage() {
 
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Max Device Seats</label>
-                    <Input
-                      type="number"
-                      min="1"
-                      max="99"
+                    <DebouncedSeatsInput
                       value={client.maxSeats ?? 1}
-                      onChange={(e) => update.mutate({ maxSeats: Number(e.target.value || 1) })}
+                      onChange={(val) => update.mutate({ maxSeats: val })}
                       disabled={update.isPending}
                     />
                   </div>
@@ -390,7 +500,7 @@ export default function ClientDetailPage() {
 
             {/* Bill Activity Chart */}
             <Card>
-              <CardHeader title="Client Billing Volume" description="Pings showing cumulative generated bills over time" />
+              <CardHeader title="Client Billing Volume" description="Cumulative generated bills over time" />
               <div className="h-64 px-6 pb-6 pt-4">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={client.billsSeries}>
@@ -404,20 +514,63 @@ export default function ClientDetailPage() {
               </div>
             </Card>
 
+            {/* Customer & Product Growth Charts */}
+            <div className="grid gap-6 sm:grid-cols-2">
+              <Card>
+                <CardHeader title="Customer Growth" description="Total customer records over time" />
+                <div className="h-52 px-6 pb-6 pt-4">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={(() => {
+                      const map = new Map<string, number>()
+                      client.heartbeats.forEach((h) => {
+                        const d = new Date(h.timestamp)
+                        const key = Number.isNaN(d.getTime()) ? h.timestamp : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+                        map.set(key, Math.max(map.get(key) ?? 0, h.customers))
+                      })
+                      return Array.from(map, ([date, customers]) => ({ date, customers })).reverse().slice(-30)
+                    })()}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                      <XAxis dataKey="date" tickLine={false} axisLine={false} />
+                      <YAxis tickLine={false} axisLine={false} allowDecimals={false} />
+                      <Tooltip />
+                      <Line type="monotone" dataKey="customers" stroke="#7c3aed" strokeWidth={2.5} dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </Card>
+              <Card>
+                <CardHeader title="Product Catalog Growth" description="Total catalogued products over time" />
+                <div className="h-52 px-6 pb-6 pt-4">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={(() => {
+                      const map = new Map<string, number>()
+                      client.heartbeats.forEach((h) => {
+                        const d = new Date(h.timestamp)
+                        const key = Number.isNaN(d.getTime()) ? h.timestamp : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+                        map.set(key, Math.max(map.get(key) ?? 0, h.products))
+                      })
+                      return Array.from(map, ([date, products]) => ({ date, products })).reverse().slice(-30)
+                    })()}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                      <XAxis dataKey="date" tickLine={false} axisLine={false} />
+                      <YAxis tickLine={false} axisLine={false} allowDecimals={false} />
+                      <Tooltip />
+                      <Line type="monotone" dataKey="products" stroke="#f59e0b" strokeWidth={2.5} dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </Card>
+            </div>
+
             {/* Internal Notes Card */}
             <Card>
               <CardHeader title="Administrative Notes" description="Internal remarks regarding client account history" />
               <div className="p-6">
-                <div className="relative">
-                  <Textarea
-                    defaultValue={client.notes}
-                    onBlur={(e) => update.mutate({ notes: e.target.value })}
-                    placeholder="Enter account remarks here... (auto-saves on blur)"
-                  />
-                  <div className="pointer-events-none absolute bottom-3 right-3 flex items-center gap-1 text-[10px] font-bold text-slate-400">
-                    <Save className="h-3 w-3" /> Auto-saves
-                  </div>
-                </div>
+                <AutoSaveTextarea
+                  defaultValue={client.notes ?? ''}
+                  onSave={(val) => update.mutate({ notes: val })}
+                  disabled={update.isPending}
+                />
               </div>
             </Card>
 
@@ -441,10 +594,12 @@ export default function ClientDetailPage() {
                   variant="danger" 
                   className="mt-4 font-bold text-xs" 
                   isLoading={remove.isPending}
-                  onClick={() => {
-                    if (window.confirm(`Archive client license for ${client.shopName}?`)) {
-                      remove.mutate()
-                    }
+                  onClick={async () => {
+                    const ok = await confirmAction(
+                      `Archive client license for ${client.shopName}?`,
+                      { title: 'Archive License', variant: 'danger', confirmLabel: 'Archive' }
+                    )
+                    if (ok) remove.mutate()
                   }}
                 >
                   <Trash2 className="h-4 w-4" /> Decommission & Archive License
@@ -586,10 +741,12 @@ export default function ClientDetailPage() {
                           size="sm"
                           variant="secondary"
                           isLoading={unblockMachine.isPending}
-                          onClick={() => {
-                            if (window.confirm(`Unblock this hardware device?`)) {
-                              unblockMachine.mutate(activation.id)
-                            }
+                          onClick={async () => {
+                            const ok = await confirmAction(
+                              `Unblock this hardware device?`,
+                              { title: 'Unblock Hardware', variant: 'default', confirmLabel: 'Unblock' }
+                            )
+                            if (ok) unblockMachine.mutate(activation.id)
                           }}
                         >
                           <RotateCcw className="h-3.5 w-3.5" /> Unblock Hardware
@@ -602,10 +759,12 @@ export default function ClientDetailPage() {
                             size="sm"
                             variant="secondary"
                             isLoading={deactivateMachine.isPending}
-                            onClick={() => {
-                              if (window.confirm(`Deactivate this hardware device seat?`)) {
-                                deactivateMachine.mutate(activation.id)
-                              }
+                            onClick={async () => {
+                              const ok = await confirmAction(
+                                `Deactivate this hardware device seat?`,
+                                { title: 'Deactivate Seat', variant: 'warning', confirmLabel: 'Deactivate' }
+                              )
+                              if (ok) deactivateMachine.mutate(activation.id)
                             }}
                           >
                             <Ban className="h-3.5 w-3.5 text-slate-500" /> Deactivate Seat
@@ -614,10 +773,12 @@ export default function ClientDetailPage() {
                             size="sm"
                             variant="danger"
                             isLoading={blockMachine.isPending}
-                            onClick={() => {
-                              if (window.confirm(`Permanently block this hardware terminal hash from this license key?`)) {
-                                blockMachine.mutate(activation.id)
-                              }
+                            onClick={async () => {
+                              const ok = await confirmAction(
+                                `Permanently block this hardware terminal hash from this license key?`,
+                                { title: 'Block Hardware', variant: 'danger', confirmLabel: 'Block' }
+                              )
+                              if (ok) blockMachine.mutate(activation.id)
                             }}
                           >
                             <Ban className="h-3.5 w-3.5" /> Block Hardware
@@ -701,6 +862,50 @@ export default function ClientDetailPage() {
           </Card>
         </div>
       )}
+
+      {activeTab === 'payments' && (
+        <div className="space-y-6">
+          <Card>
+            <CardHeader title="Payment History" description="All recorded payments for this client license" />
+            {client.payments?.length ? (
+              <div className="divide-y divide-slate-50">
+                {client.payments.map((payment) => (
+                  <div key={payment.id} className="flex items-center justify-between gap-4 p-5 hover:bg-slate-50/30 transition">
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 shrink-0">
+                        <DollarSign className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="font-display text-sm font-bold text-slate-800">
+                          {formatCurrency(payment.amount)}
+                          <span className="ml-2 text-xs font-semibold text-slate-400 uppercase">{payment.currency}</span>
+                        </p>
+                        <p className="mt-1 text-xs font-semibold text-slate-400">
+                          {payment.provider} · {formatDateTime(payment.createdAt)}
+                        </p>
+                      </div>
+                    </div>
+                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                      payment.status === 'completed' || payment.status === 'success' || payment.status === 'succeeded'
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : payment.status === 'pending' || payment.status === 'initiated'
+                        ? 'bg-amber-50 text-amber-700'
+                        : 'bg-rose-50 text-rose-700'
+                    }`}>
+                      {payment.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-6"><EmptyState title="No payments recorded" icon={<CreditCard className="h-10 w-10 text-slate-300" />}>
+                <p>No payment transactions have been recorded for this client yet. Use the "Renew License & Pay" action to record a payment.</p>
+              </EmptyState></div>
+            )}
+          </Card>
+        </div>
+      )}
+
       {showPaymentModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-dark/40 backdrop-blur-sm p-4">
           <Card className="w-full max-w-md bg-white border border-slate-100 p-6 animate-fadeIn shadow-2xl">
@@ -708,7 +913,7 @@ export default function ClientDetailPage() {
             <p className="text-xs font-semibold text-slate-400 mb-4">
               Extend the expiration date for this client terminal by recording a manual payment.
             </p>
-            
+
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Billing Period</label>
@@ -781,6 +986,7 @@ export default function ClientDetailPage() {
           </Card>
         </div>
       )}
+      {confirmDialog}
     </div>
   )
 }
