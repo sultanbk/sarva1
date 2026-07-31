@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Search, ChevronDown, ChevronUp, Activity, ShieldAlert, Key, UserCheck, CreditCard, Settings } from 'lucide-react'
+import { Search, ChevronDown, ChevronUp } from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { api } from '../lib'
 import { Card, CardHeader, Input, Select, Button, ErrorState } from '../components/ui'
