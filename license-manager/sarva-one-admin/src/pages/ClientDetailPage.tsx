@@ -6,7 +6,7 @@ import { useMutationToast } from '../hooks/useMutationToast'
 import { 
   ArrowLeft, Ban, RotateCcw, CalendarClock, RefreshCcw, Copy, Trash2, 
   Cpu, HardDrive, CpuIcon, Layers, Laptop, ShieldCheck, 
-  Activity, Info, Save, Clock, Check, CreditCard, DollarSign
+  Activity, Info, Clock, Check, CreditCard, DollarSign
 } from 'lucide-react'
 import { api, formatDate, formatDateTime, formatCurrency, copyText, timeAgo, daysRemaining } from '../lib'
 import type { ClientDetail, Plan } from '../lib'
@@ -165,7 +165,7 @@ export default function ClientDetailPage() {
   }) {
     const [value, setValue] = useState(defaultValue)
     const [saving, setSaving] = useState(false)
-    const timerRef = useRef<ReturnType<typeof setTimeout>>()
+    const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
     useEffect(() => { setValue(defaultValue ?? '') }, [defaultValue])
     const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       setValue(e.target.value)

@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useMutationToast } from '../hooks/useMutationToast'
 import type { FormEvent } from 'react'
-import { useMutation } from '@tanstack/react-query'
 import { Plus, Clipboard, MessageCircle, Check, Key, ShieldCheck, RotateCcw } from 'lucide-react'
 import { api } from '../lib'
 import type { Client, Plan } from '../lib'

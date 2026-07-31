@@ -2,9 +2,9 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useMutationToast } from '../hooks/useMutationToast'
-import { 
-  Save, Copy, RefreshCcw, ShieldAlert, Check, Server, 
-  Terminal, ShieldCheck, Lock
+import {
+  Save, Copy, RefreshCcw, Check, Server,
+  Terminal, Lock
 } from 'lucide-react'
 import { api, LICENSE_ENDPOINTS, API_URL, LICENSE_API_PREFIX, TOKEN_KEY, copyText } from '../lib'
 import { Card, CardHeader, Input, Button } from '../components/ui'

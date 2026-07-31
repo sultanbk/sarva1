@@ -27,7 +27,7 @@ export default function ClientsPage() {
   // Bulk Extend Dialog State
   const [showBulkExtend, setShowBulkExtend] = useState(false)
   const [bulkMonths, setBulkMonths] = useState(1)
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>()
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   const params = new URLSearchParams()
   params.set('page', String(page))
