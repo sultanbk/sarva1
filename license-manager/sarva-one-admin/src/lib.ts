@@ -4,7 +4,7 @@ import { twMerge } from 'tailwind-merge'
 export const TOKEN_KEY = 'sarvaone_admin_token'
 export const API_URL =
   import.meta.env.VITE_API_URL ||
-  'https://sarvaonelicencemanagement-production.up.railway.app'
+  'https://sarva1.onrender.com'
 export const ADMIN_API_PREFIX = import.meta.env.VITE_ADMIN_API_PREFIX || '/api/admin'
 export const LICENSE_API_PREFIX = import.meta.env.VITE_LICENSE_API_PREFIX || '/api/license'
 export const LICENSE_ENDPOINTS = [
@@ -92,6 +92,25 @@ export function timeAgo(value?: string | null): string {
   if (days < 30) return `${days}d ago`
   const months = Math.floor(days / 30)
   return `${months}mo ago`
+}
+
+export type ConnectionStatus = 'online' | 'stale' | 'offline' | 'never'
+
+/**
+ * Classifies a client's connection state based on how recently they sent a heartbeat.
+ * The client app sends heartbeats every 30 minutes, so:
+ *   online  = last heartbeat < 35 min ago (within the expected window)
+ *   stale   = 35 min – 2 hours ago (one missed heartbeat, possibly sleeping/offline)
+ *   offline = > 2 hours ago (clearly not checking in)
+ *   never   = no heartbeat on record
+ */
+export function connectionStatus(lastHeartbeatAt?: string | null): ConnectionStatus {
+  if (!lastHeartbeatAt) return 'never'
+  const ageMs = Date.now() - new Date(lastHeartbeatAt).getTime()
+  if (Number.isNaN(ageMs)) return 'never'
+  if (ageMs < 35 * 60 * 1000) return 'online'
+  if (ageMs < 2 * 60 * 60 * 1000) return 'stale'
+  return 'offline'
 }
 
 export type DaysRemaining = { days: number; label: string; urgent: boolean; warning: boolean; ok: boolean }
@@ -263,6 +282,7 @@ type ServerLicenseDetail = ServerLicense & {
   events?: ServerLicenseEvent[]
   activations?: ServerActivation[]
   payments?: ServerPayment[]
+  logSummary?: { total: number; byLevel: Record<string, number> }
 }
 
 type LicenseListResponse = {
@@ -312,6 +332,51 @@ type ServerDashboard = {
   expiringSoon?: ServerLicense[]
   graceLicenses?: ServerLicense[]
   inactiveClients?: ServerLicense[]
+}
+
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal'
+
+export type ClientLog = {
+  id: string
+  licenseId: string
+  machineId: string
+  appVersion: string
+  level: LogLevel
+  message: string
+  source?: string
+  stackTrace?: string
+  metadata?: Record<string, unknown>
+  ipAddress?: string
+  clientTs?: string
+  createdAt: string
+}
+
+export type ClientLogRow = ClientLog & { shopName?: string }
+
+export type LogsResponse = {
+  logs: ClientLogRow[]
+  pagination: { page: number; pageSize: number; total: number }
+  summary?: { total: number; byLevel: Record<LogLevel, number> }
+}
+
+export type ExtendedDashboard = {
+  revenue: {
+    monthly: Array<{ month: string; revenue: number }>
+    byPlan: Array<{ plan: Plan; revenue: number }>
+  }
+  activations: { perMonth: Array<{ month: string; activations: number }> }
+  resourceUsage: {
+    dbSizeTrend: Array<{ date: string; dbSizeMB: number }>
+    ramUsedTrend: Array<{ date: string; ramUsedGB: number }>
+    appVersionTimeline: Array<{ date: string; version: string; count: number }>
+  }
+  errors: {
+    byLevelOverTime: Array<{ bucket: string; debug: number; info: number; warn: number; error: number; fatal: number }>
+    byLevel: Array<{ level: string; count: number }>
+    topMessages: Array<{ message: string; count: number }>
+    topFailingClients: Array<{ licenseId: string; shopName: string; count: number }>
+    total: number
+  }
 }
 
 export type Client = {
@@ -386,6 +451,7 @@ export type ClientDetail = Client & {
   activations: Activation[]
   payments: Payment[]
   billsSeries: Array<{ date: string; bills: number }>
+  logSummary: { total: number; byLevel: Record<string, number> }
 }
 
 export type DashboardData = {
@@ -545,6 +611,7 @@ function toClientDetail(license: ServerLicenseDetail): ClientDetail {
     activations,
     payments,
     billsSeries: Array.from(dailyBills, ([date, bills]) => ({ date, bills })).reverse().slice(-30),
+    logSummary: license.logSummary ?? { total: 0, byLevel: { debug: 0, info: 0, warn: 0, error: 0, fatal: 0 } }
   }
 }
 
@@ -660,6 +727,11 @@ export const api = {
   apiKey: () => apiRequest<{ apiKey: string }>(`${ADMIN_API_PREFIX}/config/api-key`),
   auditLog: (params = '') =>
     apiRequest<{ events: ServerLicenseEvent[]; pagination: { page: number; pageSize: number; total: number } }>(`${ADMIN_API_PREFIX}/audit-log${params ? `?${params}` : ''}`),
+  clientLogs: (id: string, params = '') =>
+    apiRequest<LogsResponse>(`${ADMIN_API_PREFIX}/licenses/${id}/logs${params ? `?${params}` : ''}`),
+  clientLogsGlobal: (params = '') =>
+    apiRequest<LogsResponse>(`${ADMIN_API_PREFIX}/logs${params ? `?${params}` : ''}`),
+  dashboardExtended: () => apiRequest<ExtendedDashboard>(`${ADMIN_API_PREFIX}/dashboard/extended`),
   bulkExtend: (licenseIds: string[], months: number) =>
     apiRequest<{ updated: ServerLicense[] }>(`${ADMIN_API_PREFIX}/licenses/bulk-extend`, { method: 'POST', body: body({ licenseIds, months }) }),
 }

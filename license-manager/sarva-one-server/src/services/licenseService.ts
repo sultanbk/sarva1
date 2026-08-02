@@ -1,7 +1,7 @@
 import { createHash, randomInt } from "node:crypto";
-import { and, count, desc, eq, getTableColumns, gte, ilike, isNull, isNotNull, lte, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, getTableColumns, gte, ilike, isNull, isNotNull, lte, or, sql, lt } from "drizzle-orm";
 import { db } from "../db/connection.js";
-import { heartbeats, licenseActivations, licenseEvents, licenses, paymentEvents, plans, planEntitlements, type License, type Plan } from "../db/schema.js";
+import { clientLogs, heartbeats, licenseActivations, licenseEvents, licenses, paymentEvents, plans, planEntitlements, type License, type Plan, type ClientLog } from "../db/schema.js";
 import jwt from "jsonwebtoken";
 import { licenseKeyId, licensePrivateKey, licensePublicKey } from "../config.js";
 
@@ -373,6 +373,109 @@ export async function recordLicenseEvent(params: {
   });
 }
 
+export const clientLogLevels = ["debug", "info", "warn", "error", "fatal"] as const;
+export type ClientLogLevel = (typeof clientLogLevels)[number];
+
+export async function insertClientLogs(params: {
+  licenseId: string;
+  machineId: string;
+  appVersion: string;
+  ipAddress: string;
+  entries: Array<{
+    level: ClientLogLevel;
+    message: string;
+    source?: string;
+    stackTrace?: string;
+    metadata?: Record<string, unknown>;
+    clientTs?: string;
+  }>;
+}) {
+  if (!params.entries.length) return;
+  await db.insert(clientLogs).values(
+    params.entries.map((e) => ({
+      licenseId: params.licenseId,
+      machineId: params.machineId,
+      appVersion: params.appVersion,
+      ipAddress: params.ipAddress,
+      level: e.level,
+      message: e.message,
+      source: e.source ?? null,
+      stackTrace: e.stackTrace ?? null,
+      metadata: e.metadata ?? null,
+      clientTs: e.clientTs ? new Date(e.clientTs) : null
+    }))
+  );
+  const retentionDays = process.env.LOG_RETENTION_DAYS ? Number(process.env.LOG_RETENTION_DAYS) : null;
+  if (retentionDays && Math.random() < 0.01) {
+    const cutoff = new Date(Date.now() - retentionDays * 864e5);
+    await db.delete(clientLogs).where(lt(clientLogs.createdAt, cutoff));
+  }
+}
+
+export async function queryClientLogs(filters: {
+  licenseId?: string;
+  level?: ClientLogLevel;
+  q?: string;
+  source?: string;
+  from?: Date;
+  to?: Date;
+  limit: number;
+  offset: number;
+}): Promise<{
+  logs: ClientLog[];
+  total: number;
+  summary: { total: number; byLevel: Record<ClientLogLevel, number> };
+}> {
+  const conditions = [];
+  if (filters.licenseId) conditions.push(eq(clientLogs.licenseId, filters.licenseId));
+  if (filters.level) conditions.push(eq(clientLogs.level, filters.level));
+  if (filters.source) conditions.push(eq(clientLogs.source, filters.source));
+  if (filters.q) {
+    const search = `%${filters.q}%`;
+    conditions.push(or(ilike(clientLogs.message, search), ilike(clientLogs.source, search)));
+  }
+  if (filters.from) conditions.push(gte(clientLogs.createdAt, filters.from));
+  if (filters.to) {
+    const toDate = new Date(filters.to);
+    toDate.setDate(toDate.getDate() + 1);
+    conditions.push(lte(clientLogs.createdAt, toDate));
+  }
+  const where = conditions.length ? and(...conditions) : undefined;
+
+  const [logs, totalResult, summaryRows] = await Promise.all([
+    db
+      .select()
+      .from(clientLogs)
+      .where(where)
+      .orderBy(desc(clientLogs.createdAt))
+      .limit(filters.limit)
+      .offset(filters.offset),
+    db.select({ total: count() }).from(clientLogs).where(where),
+    db
+      .select({ level: clientLogs.level, count: count() })
+      .from(clientLogs)
+      .where(where)
+      .groupBy(clientLogs.level)
+  ]);
+
+  const byLevel: Record<ClientLogLevel, number> = {
+    debug: 0,
+    info: 0,
+    warn: 0,
+    error: 0,
+    fatal: 0
+  };
+  for (const row of summaryRows) {
+    byLevel[row.level as ClientLogLevel] = Number(row.count);
+  }
+
+  return {
+    logs,
+    total: totalResult[0]?.total ?? 0,
+    summary: { total: totalResult[0]?.total ?? 0, byLevel }
+  };
+}
+
 export function signLicensePayload(payload: Record<string, unknown>): string {
   return jwt.sign(payload, licensePrivateKey(), {
     algorithm: "RS256",
@@ -653,6 +756,186 @@ export async function dashboardStats() {
   };
 }
 
+export async function dashboardExtended() {
+  const now = Date.now();
+  const oneDay = 24 * 60 * 60 * 1000;
+  const sevenDays = 7 * 24 * 60 * 60 * 1000;
+  const fourteenDays = 14 * 24 * 60 * 60 * 1000;
+  const sixMonths = 6 * 30 * 24 * 60 * 60 * 1000;
+
+  const monthKey = (value: Date) => value.toLocaleDateString("en-IN", { month: "short", year: "2-digit" });
+
+  // Revenue monthly (last 6 months)
+  const revenueMonthlyResult = (await db.execute(sql`
+    select date_trunc('month', created_at)::date as month, sum(amount) as revenue
+    from payment_events
+    where status in ('paid', 'succeeded', 'success', 'completed')
+      and created_at >= ${new Date(now - sixMonths)}
+    group by date_trunc('month', created_at)
+    order by month
+  `)) as any;
+  const revenueMonthly = (revenueMonthlyResult.rows || []).map((r: any) => ({
+    month: monthKey(new Date(r.month)),
+    revenue: Number(r.revenue)
+  }));
+
+  // Revenue by plan
+  const revenueByPlanResult = (await db.execute(sql`
+    select l.plan, sum(pe.amount) as revenue
+    from payment_events pe
+    join licenses l on pe.license_id = l.id
+    where pe.status in ('paid', 'succeeded', 'success', 'completed')
+    group by l.plan
+  `)) as any;
+  const revenueByPlan = (revenueByPlanResult.rows || []).map((r: any) => ({
+    plan: r.plan as Plan,
+    revenue: Number(r.revenue)
+  }));
+
+  // Activations per month (last 6 months)
+  const activationsResult = (await db.execute(sql`
+    select date_trunc('month', activated_at)::date as month, count(*) as activations
+    from license_activations
+    where activated_at >= ${new Date(now - sixMonths)}
+    group by date_trunc('month', activated_at)
+    order by month
+  `)) as any;
+  const activationsPerMonth = (activationsResult.rows || []).map((r: any) => ({
+    month: monthKey(new Date(r.month)),
+    activations: Number(r.activations)
+  }));
+
+  // Resource usage - daily avg dbSizeMB and RAM used (last 14 days)
+  const resourceResult = (await db.execute(sql`
+    select date_trunc('day', created_at)::date as date,
+      avg((metadata->>'dbSizeMB')::numeric) as avg_db_size,
+      avg((metadata->>'totalMemoryGB')::numeric - (metadata->>'freeMemoryGB')::numeric) as avg_ram_used
+    from heartbeats
+    where metadata is not null
+      and (metadata->>'dbSizeMB') is not null
+      and (metadata->>'totalMemoryGB') is not null
+      and (metadata->>'freeMemoryGB') is not null
+      and created_at >= ${new Date(now - fourteenDays)}
+    group by date_trunc('day', created_at)
+    order by date
+  `)) as any;
+  const dbSizeTrend = (resourceResult.rows || []).map((r: any) => ({
+    date: new Date(r.date).toLocaleDateString("en-IN", { month: "short", day: "numeric" }),
+    dbSizeMB: Number(r.avg_db_size)
+  }));
+  const ramUsedTrend = (resourceResult.rows || []).map((r: any) => ({
+    date: new Date(r.date).toLocaleDateString("en-IN", { month: "short", day: "numeric" }),
+    ramUsedGB: Number(r.avg_ram_used)
+  }));
+
+  // App version timeline (last 14 days)
+  const versionResult = (await db.execute(sql`
+    select date_trunc('day', created_at)::date as date, app_version as version, count(*) as count
+    from heartbeats
+    where created_at >= ${new Date(now - fourteenDays)}
+    group by date_trunc('day', created_at), app_version
+    order by date, count desc
+  `)) as any;
+  const appVersionTimeline = (versionResult.rows || []).map((r: any) => ({
+    date: new Date(r.date).toLocaleDateString("en-IN", { month: "short", day: "numeric" }),
+    version: r.version,
+    count: Number(r.count)
+  }));
+
+  // Errors from client_logs (last 7 days)
+  const errorsResult = (await db.execute(sql`
+    select date_trunc('day', created_at)::date as bucket,
+      level,
+      count(*) as count
+    from client_logs
+    where level in ('error', 'fatal')
+      and created_at >= ${new Date(now - sevenDays)}
+    group by date_trunc('day', created_at), level
+    order by bucket
+  `)) as any;
+  const byLevelOverTimeMap = new Map<string, Record<string, number>>();
+  for (const row of errorsResult.rows || []) {
+    const key = new Date(row.bucket).toLocaleDateString("en-IN", { month: "short", day: "numeric" });
+    if (!byLevelOverTimeMap.has(key)) {
+      byLevelOverTimeMap.set(key, { debug: 0, info: 0, warn: 0, error: 0, fatal: 0 });
+    }
+    byLevelOverTimeMap.get(key)![row.level] = Number(row.count);
+  }
+  const byLevelOverTime = Array.from(byLevelOverTimeMap.entries()).map(([bucket, levels]) => ({
+    bucket,
+    ...levels
+  }));
+
+  // Error by level (total last 7 days)
+  const byLevelResult = (await db.execute(sql`
+    select level, count(*) as count
+    from client_logs
+    where level in ('debug', 'info', 'warn', 'error', 'fatal')
+      and created_at >= ${new Date(now - sevenDays)}
+    group by level
+  `)) as any;
+  const byLevel = (byLevelResult.rows || []).map((r: any) => ({
+    level: r.level,
+    count: Number(r.count)
+  }));
+
+  // Top error messages (last 7 days)
+  const topMessagesResult = (await db.execute(sql`
+    select left(message, 200) as message, count(*) as count
+    from client_logs
+    where level in ('error', 'fatal')
+      and created_at >= ${new Date(now - sevenDays)}
+    group by left(message, 200)
+    order by count desc
+    limit 8
+  `)) as any;
+  const topMessages = (topMessagesResult.rows || []).map((r: any) => ({
+    message: r.message,
+    count: Number(r.count)
+  }));
+
+  // Top failing clients (last 7 days)
+  const topFailingResult = (await db.execute(sql`
+    select cl.license_id as licenseId, l.shop_name as shopName, count(*) as count
+    from client_logs cl
+    join licenses l on cl.license_id = l.id
+    where cl.level in ('error', 'fatal')
+      and cl.created_at >= ${new Date(now - sevenDays)}
+    group by cl.license_id, l.shop_name
+    order by count desc
+    limit 8
+  `)) as any;
+  const topFailingClients = (topFailingResult.rows || []).map((r: any) => ({
+    licenseId: r.licenseId,
+    shopName: r.shopName,
+    count: Number(r.count)
+  }));
+
+  const totalErrorsResult = (await db.execute(sql`
+    select count(*) as total
+    from client_logs
+    where level in ('error', 'fatal')
+      and created_at >= ${new Date(now - sevenDays)}
+  `)) as any;
+  const totalErrors = Number((totalErrorsResult.rows?.[0]?.total) ?? 0);
+
+  return {
+    revenue: {
+      monthly: revenueMonthly,
+      byPlan: revenueByPlan
+    },
+    activations: { perMonth: activationsPerMonth },
+    resourceUsage: { dbSizeTrend, ramUsedTrend, appVersionTimeline },
+    errors: {
+      byLevelOverTime,
+      byLevel,
+      topMessages,
+      topFailingClients,
+      total: totalErrors
+    }
+  };
+}
+
 export async function licenseWithHeartbeatHistory(id: string) {
   const license = await db.query.licenses.findFirst({
     where: and(eq(licenses.id, id), isNull(licenses.deletedAt))
@@ -662,7 +945,7 @@ export async function licenseWithHeartbeatHistory(id: string) {
     return undefined;
   }
 
-  const [history, latestHeartbeat, events, activations, payments] = await Promise.all([
+  const [history, latestHeartbeat, events, activations, payments, logSummary] = await Promise.all([
     db.query.heartbeats.findMany({
       where: eq(heartbeats.licenseId, id),
       orderBy: desc(heartbeats.createdAt),
@@ -686,7 +969,12 @@ export async function licenseWithHeartbeatHistory(id: string) {
       where: eq(paymentEvents.licenseId, id),
       orderBy: desc(paymentEvents.createdAt),
       limit: 100
-    })
+    }),
+    db
+      .select({ level: clientLogs.level, count: count() })
+      .from(clientLogs)
+      .where(eq(clientLogs.licenseId, id))
+      .groupBy(clientLogs.level)
   ]);
 
   const usageSummary = latestHeartbeat
@@ -700,7 +988,19 @@ export async function licenseWithHeartbeatHistory(id: string) {
       }
     : null;
 
-  return { ...license, usageSummary, heartbeats: history, events, activations, payments };
+  const byLevel: Record<ClientLogLevel, number> = {
+    debug: 0,
+    info: 0,
+    warn: 0,
+    error: 0,
+    fatal: 0
+  };
+  for (const row of logSummary) {
+    byLevel[row.level as ClientLogLevel] = Number(row.count);
+  }
+  const totalLogs = logSummary.reduce((sum, row) => sum + Number(row.count), 0);
+
+  return { ...license, usageSummary, heartbeats: history, events, activations, payments, logSummary: { total: totalLogs, byLevel } };
 }
 
 export const updatedNow = sql`now()`;

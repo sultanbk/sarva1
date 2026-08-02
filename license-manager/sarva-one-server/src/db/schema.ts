@@ -13,6 +13,7 @@ import {
 
 export const planEnum = pgEnum("plan", ["starter", "professional", "enterprise"]);
 export const statusEnum = pgEnum("status", ["trial", "active", "expired", "suspended"]);
+export const logLevelEnum = pgEnum("log_level", ["debug", "info", "warn", "error", "fatal"]);
 
 export const licenses = pgTable("licenses", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -130,11 +131,29 @@ export const paymentEvents = pgTable("payment_events", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
 });
 
+export const clientLogs = pgTable("client_logs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  licenseId: uuid("license_id")
+    .notNull()
+    .references(() => licenses.id, { onDelete: "cascade" }),
+  machineId: varchar("machine_id", { length: 255 }).notNull(),
+  appVersion: varchar("app_version", { length: 50 }).notNull(),
+  level: logLevelEnum("level").notNull().default("info"),
+  message: text("message").notNull(),
+  source: varchar("source", { length: 100 }),
+  stackTrace: text("stack_trace"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  ipAddress: varchar("ip_address", { length: 100 }),
+  clientTs: timestamp("client_ts", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+});
+
 export const licensesRelations = relations(licenses, ({ many }) => ({
   heartbeats: many(heartbeats),
   events: many(licenseEvents),
   activations: many(licenseActivations),
-  payments: many(paymentEvents)
+  payments: many(paymentEvents),
+  logs: many(clientLogs)
 }));
 
 export const licenseActivationsRelations = relations(licenseActivations, ({ one }) => ({
@@ -176,8 +195,16 @@ export const paymentEventsRelations = relations(paymentEvents, ({ one }) => ({
   })
 }));
 
+export const clientLogsRelations = relations(clientLogs, ({ one }) => ({
+  license: one(licenses, {
+    fields: [clientLogs.licenseId],
+    references: [licenses.id]
+  })
+}));
+
 export type License = typeof licenses.$inferSelect;
 export type NewLicense = typeof licenses.$inferInsert;
+export type ClientLog = typeof clientLogs.$inferSelect;
 export type LicenseActivation = typeof licenseActivations.$inferSelect;
 export type LicenseEvent = typeof licenseEvents.$inferSelect;
 export type Plan = (typeof planEnum.enumValues)[number];

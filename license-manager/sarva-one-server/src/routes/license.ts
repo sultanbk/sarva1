@@ -3,11 +3,12 @@ import { z } from "zod";
 import { db } from "../db/connection.js";
 import { licenses } from "../db/schema.js";
 import { requireApiKey } from "../middleware/auth.js";
-import { licenseRateLimit } from "../middleware/rateLimit.js";
+import { clientLogRateLimit, licenseRateLimit } from "../middleware/rateLimit.js";
 import {
   errorResponse,
   expiryState,
   findLicenseByKey,
+  insertClientLogs,
   insertHeartbeat,
   isMachineActivated,
   isMachineBlocked,
@@ -21,7 +22,7 @@ import { eq } from "drizzle-orm";
 
 export const licenseRouter = Router();
 
-licenseRouter.use(licenseRateLimit, requireApiKey);
+licenseRouter.use(requireApiKey);
 
 const activationSchema = z.object({
   key: z.string().min(1),
@@ -55,11 +56,30 @@ const heartbeatSchema = activationSchema.extend({
     .optional()
 });
 
-licenseRouter.get("/public-key", (_req, res) => {
+const logEntrySchema = z.object({
+  level: z.enum(["debug", "info", "warn", "error", "fatal"]),
+  message: z.string().min(1).max(2000),
+  source: z.string().min(1).max(100).optional(),
+  stackTrace: z.string().max(4000).optional(),
+  metadata: z
+    .record(z.unknown())
+    .refine((value) => JSON.stringify(value ?? {}).length <= 4000, "metadata exceeds 4000 characters")
+    .optional(),
+  clientTs: z.string().datetime({ offset: true }).optional()
+});
+
+const logsSchema = z.object({
+  key: z.string().min(1),
+  machineId: z.string().min(1).max(255),
+  appVersion: z.string().min(1).max(50),
+  logs: z.array(logEntrySchema).min(1).max(100)
+});
+
+licenseRouter.get("/public-key", licenseRateLimit, (_req, res) => {
   return res.json(successResponse(publicKeyPayload()));
 });
 
-licenseRouter.post("/activate", async (req, res, next) => {
+licenseRouter.post("/activate", licenseRateLimit, async (req, res, next) => {
   try {
     const body = activationSchema.parse(req.body);
     const license = await findLicenseByKey(body.key);
@@ -124,7 +144,7 @@ licenseRouter.post("/activate", async (req, res, next) => {
   }
 });
 
-licenseRouter.post("/validate", async (req, res, next) => {
+licenseRouter.post("/validate", licenseRateLimit, async (req, res, next) => {
   try {
     const body = activationSchema.parse(req.body);
     const license = await findLicenseByKey(body.key);
@@ -163,7 +183,7 @@ licenseRouter.post("/validate", async (req, res, next) => {
   }
 });
 
-licenseRouter.post("/heartbeat", async (req, res) => {
+licenseRouter.post("/heartbeat", licenseRateLimit, async (req, res) => {
   try {
     const body = heartbeatSchema.parse(req.body);
     const license = await findLicenseByKey(body.key);
@@ -197,5 +217,26 @@ licenseRouter.post("/heartbeat", async (req, res) => {
   } catch (error) {
     console.error("Heartbeat processing error:", error);
     return res.json(successResponse({ received: true }));
+  }
+});
+
+licenseRouter.post("/logs", clientLogRateLimit, async (req, res) => {
+  try {
+    const body = logsSchema.parse(req.body);
+    const license = await findLicenseByKey(body.key);
+    if (!license) return res.status(404).json(errorResponse("LICENSE_NOT_FOUND", "License key was not found."));
+    if (await isMachineBlocked(body.machineId)) return res.status(403).json(errorResponse("MACHINE_BLOCKED", "This device has been blocked by the administrator."));
+    if (!(await isMachineActivated(license, body.machineId))) return res.status(409).json(errorResponse("MACHINE_MISMATCH", "License is not activated on this device."));
+    await insertClientLogs({
+      licenseId: license.id,
+      machineId: body.machineId,
+      appVersion: body.appVersion,
+      ipAddress: req.ip ?? req.socket.remoteAddress ?? "unknown",
+      entries: body.logs
+    });
+    return res.json(successResponse({ received: body.logs.length }));
+  } catch (error) {
+    console.error("Client log processing error:", error);
+    return res.json(successResponse({ received: 0 }));
   }
 });

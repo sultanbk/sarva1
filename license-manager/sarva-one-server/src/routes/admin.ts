@@ -1,13 +1,14 @@
 import bcrypt from "bcryptjs";
-import { and, asc, count, desc, eq, isNull, ilike, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNull, ilike, inArray, or } from "drizzle-orm";
 import { Router, type Request } from "express";
 import { z } from "zod";
 import { db } from "../db/connection.js";
-import { adminUsers, licenseActivations, licenseEvents, licenses, paymentEvents } from "../db/schema.js";
+import { adminUsers, clientLogs, licenseActivations, licenseEvents, licenses, paymentEvents } from "../db/schema.js";
 import { requireAdminAuth, signAdminToken } from "../middleware/auth.js";
 import { adminRateLimit, loginRateLimit } from "../middleware/rateLimit.js";
 import {
   buildLicenseFilters,
+  dashboardExtended,
   dashboardStats,
   errorResponse,
   generateUniqueLicenseKey,
@@ -17,6 +18,7 @@ import {
   licenseWithHeartbeatHistory,
   planCatalog,
   planMonthlyPrices,
+  queryClientLogs,
   recordLicenseEvent,
   successResponse
 } from "../services/licenseService.js";
@@ -45,7 +47,7 @@ const listSchema = z.object({
   status: z.enum(["trial", "active", "expired", "suspended"]).optional(),
   plan: z.enum(["starter", "professional", "enterprise"]).optional(),
   q: z.string().trim().min(1).optional(),
-  sort: z.enum(["createdAt", "shopName", "ownerName", "plan", "status", "expiresAt", "lastHeartbeatAt"]).default("createdAt"),
+  sort: z.string().default("createdAt"),
   includeArchived: z.enum(["true", "false"]).transform((value) => value === "true").optional()
 });
 
@@ -125,13 +127,17 @@ async function recordAdminEvent(
   });
 }
 
-function licenseOrderBy(sort: z.infer<typeof listSchema>["sort"]) {
-  if (sort === "shopName") return asc(licenses.shopName);
-  if (sort === "ownerName") return asc(licenses.ownerName);
-  if (sort === "plan") return asc(licenses.plan);
-  if (sort === "status") return asc(licenses.status);
-  if (sort === "expiresAt") return asc(licenses.expiresAt);
-  if (sort === "lastHeartbeatAt") return desc(latestHeartbeatAtSql());
+function licenseOrderBy(sort: string) {
+  const descending = sort.startsWith("-");
+  const field = descending ? sort.slice(1) : sort;
+  const dir = descending ? desc : asc;
+
+  if (field === "shopName") return dir(licenses.shopName);
+  if (field === "ownerName") return dir(licenses.ownerName);
+  if (field === "plan") return dir(licenses.plan);
+  if (field === "status") return dir(licenses.status);
+  if (field === "expiresAt") return dir(licenses.expiresAt);
+  if (field === "lastHeartbeatAt") return dir(latestHeartbeatAtSql());
   return desc(licenses.createdAt);
 }
 
@@ -667,6 +673,104 @@ adminRouter.get("/audit-log", async (req, res, next) => {
     if (error instanceof z.ZodError) {
       return res.status(400).json(errorResponse("VALIDATION_ERROR", validationMessage(error)));
     }
+    return next(error);
+  }
+});
+
+const clientLogsQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce.number().int().positive().max(100).default(50),
+  level: z.enum(["debug", "info", "warn", "error", "fatal"]).optional(),
+  q: z.string().trim().optional(),
+  source: z.string().trim().optional(),
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+  licenseId: z.string().uuid().optional()
+});
+
+adminRouter.get("/licenses/:id/logs", async (req, res, next) => {
+  try {
+    const license = await db.query.licenses.findFirst({ where: eq(licenses.id, req.params.id) });
+    if (!license) return res.status(404).json(errorResponse("LICENSE_NOT_FOUND", "License not found."));
+
+    const query = clientLogsQuerySchema.parse(req.query);
+    const offset = (query.page - 1) * query.pageSize;
+
+    const result = await queryClientLogs({
+      licenseId: req.params.id,
+      level: query.level,
+      q: query.q,
+      source: query.source,
+      from: query.from,
+      to: query.to,
+      limit: query.pageSize,
+      offset
+    });
+
+    return res.json(
+      successResponse({
+        logs: result.logs,
+        pagination: { page: query.page, pageSize: query.pageSize, total: result.total },
+        summary: result.summary
+      })
+    );
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json(errorResponse("VALIDATION_ERROR", validationMessage(error)));
+    }
+    return next(error);
+  }
+});
+
+adminRouter.get("/logs", async (req, res, next) => {
+  try {
+    const query = clientLogsQuerySchema.parse(req.query);
+    const offset = (query.page - 1) * query.pageSize;
+
+    const result = await queryClientLogs({
+      licenseId: query.licenseId,
+      level: query.level,
+      q: query.q,
+      source: query.source,
+      from: query.from,
+      to: query.to,
+      limit: query.pageSize,
+      offset
+    });
+
+    // For global logs, enrich with shopName
+    let logsWithShopName = result.logs;
+    if (result.logs.length > 0) {
+      const licenseIds = [...new Set(result.logs.map((l) => l.licenseId))];
+      const licenseMap = new Map(
+        (await db
+          .select({ id: licenses.id, shopName: licenses.shopName })
+          .from(licenses)
+          .where(inArray(licenses.id, licenseIds))
+        ).map((l) => [l.id, l.shopName])
+      );
+      logsWithShopName = result.logs.map((log) => ({ ...log, shopName: licenseMap.get(log.licenseId) }));
+    }
+
+    return res.json(
+      successResponse({
+        logs: logsWithShopName,
+        pagination: { page: query.page, pageSize: query.pageSize, total: result.total },
+        summary: result.summary
+      })
+    );
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json(errorResponse("VALIDATION_ERROR", validationMessage(error)));
+    }
+    return next(error);
+  }
+});
+
+adminRouter.get("/dashboard/extended", async (_req, res, next) => {
+  try {
+    return res.json(successResponse(await dashboardExtended()));
+  } catch (error) {
     return next(error);
   }
 });

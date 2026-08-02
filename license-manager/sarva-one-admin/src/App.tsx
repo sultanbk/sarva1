@@ -11,6 +11,7 @@ import {
   UserRound,
   Shield,
   Activity,
+  Terminal,
   ChevronLeft,
   ChevronRight
 } from 'lucide-react'
@@ -41,6 +42,7 @@ import ClientDetailPage from './pages/ClientDetailPage'
 import CreateLicensePage from './pages/CreateLicensePage'
 import SettingsPage from './pages/SettingsPage'
 import AuditLogPage from './pages/AuditLogPage'
+import ClientLogsPage from './pages/ClientLogsPage'
 import { Button } from './components/ui'
 import { Breadcrumbs } from './components/Breadcrumbs'
 import { CommandPalette } from './components/CommandPalette'
@@ -93,6 +95,7 @@ function AppShell() {
     '/clients/new': 'Generate Client License',
     '/settings': 'Console Configuration',
     '/audit-log': 'Audit Trail Logs',
+    '/logs': 'Client Runtime Logs',
   }
   
   const title = location.pathname.startsWith('/clients/') && location.pathname !== '/clients/new' 
@@ -151,6 +154,7 @@ function AppShell() {
           <SidebarLink to="/clients" icon={<Store />} label="Clients List" collapsed={collapsed} onClick={() => setOpen(false)} />
           <SidebarLink to="/clients/new" icon={<Plus />} label="Generate Key" collapsed={collapsed} onClick={() => setOpen(false)} />
           <SidebarLink to="/audit-log" icon={<Activity />} label="Audit Log" collapsed={collapsed} onClick={() => setOpen(false)} />
+          <SidebarLink to="/logs" icon={<Terminal />} label="Client Logs" collapsed={collapsed} onClick={() => setOpen(false)} />
           <SidebarLink to="/settings" icon={<Settings />} label="Console Config" collapsed={collapsed} onClick={() => setOpen(false)} />
         </nav>
 
@@ -298,6 +302,7 @@ export default function App() {
               <Route path="clients/:id" element={<ClientDetailPage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="audit-log" element={<AuditLogPage />} />
+              <Route path="logs" element={<ClientLogsPage />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

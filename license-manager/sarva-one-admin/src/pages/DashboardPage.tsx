@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react'
-import { CalendarClock, CheckCircle2, Clipboard, Globe, RefreshCcw, ShieldCheck, Store, UserCheck, Zap, MessageCircle } from 'lucide-react'
-import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Area, AreaChart } from 'recharts'
+import { CalendarClock, CheckCircle2, Clipboard, Globe, RefreshCcw, ShieldCheck, Store, UserCheck, Zap, MessageCircle, AlertTriangle } from 'lucide-react'
+import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Area, AreaChart, Line, LineChart } from 'recharts'
 import { NavLink } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMutationToast } from '../hooks/useMutationToast'
-import { api, formatDate, formatDateTime } from '../lib'
+import { api, formatDate, formatDateTime, formatCurrency } from '../lib'
 import type { Client } from '../lib'
 import { Card, CardHeader, LoadingState, ErrorState, EmptyState, Button } from '../components/ui'
 
@@ -12,8 +12,9 @@ const chartColors = ['#0048eb', '#0078f7', '#7c3aed', '#f59e0b', '#10b981']
 
 export default function DashboardPage() {
   const query = useQuery({ queryKey: ['dashboard'], queryFn: api.dashboard })
+  const extendedQuery = useQuery({ queryKey: ['dashboard-extended'], queryFn: api.dashboardExtended })
   const qc = useQueryClient()
-  
+
   const renew = useMutationToast({
     mutationFn: api.renew,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['dashboard'] }),
@@ -24,6 +25,11 @@ export default function DashboardPage() {
   if (query.isError || !query.data) return <ErrorState retry={() => query.refetch()} />
 
   const data = query.data
+  const extended = extendedQuery.data
+
+  const coveragePct = data.totalClients > 0 ? Math.round((data.reportingClients / data.totalClients) * 100) : 0
+  const coverageWidth = data.totalClients > 0 ? (data.reportingClients / data.totalClients) * 100 : 0
+  const silentWidth = data.totalClients > 0 ? ((data.totalClients - data.reportingClients) / data.totalClients) * 100 : 0
 
   const stats = [
     { label: 'Total Clients', value: data.totalClients, icon: Store, color: 'text-blue-600 bg-blue-50/70 border-blue-100' },
@@ -164,11 +170,11 @@ export default function DashboardPage() {
           <CardHeader title="Sync Coverage" description="Clients reporting vs silent" />
           <div className="h-56 flex items-center justify-center">
             <div className="text-center">
-              <p className="font-display text-5xl font-black text-brand-dark">{Math.round(data.reportingClients / data.totalClients * 100)}%</p>
+              <p className="font-display text-5xl font-black text-brand-dark">{coveragePct}%</p>
               <p className="mt-2 text-xs font-bold text-slate-400">{data.reportingClients} of {data.totalClients} clients</p>
               <div className="mt-4 flex justify-center gap-1">
-                <div className="h-3 rounded-full bg-emerald-500" style={{ width: `${data.reportingClients / data.totalClients * 100}%`, maxWidth: 120 }} />
-                <div className="h-3 rounded-full bg-slate-200" style={{ width: `${(data.totalClients - data.reportingClients) / data.totalClients * 100}%`, maxWidth: 40 }} />
+                <div className="h-3 rounded-full bg-emerald-500" style={{ width: `${coverageWidth}%`, maxWidth: 120 }} />
+                <div className="h-3 rounded-full bg-slate-200" style={{ width: `${silentWidth}%`, maxWidth: 40 }} />
               </div>
               <p className="mt-1 text-[10px] font-bold text-slate-400">{data.clientsNeverSynced || 0} never synced</p>
             </div>
@@ -280,14 +286,148 @@ export default function DashboardPage() {
           actionLabel="Contact Admin" 
           contact 
         />
-        <AlertList 
-          title="Offline Installations (48h+)" 
+        <AlertList
+          title="Offline Installations (48h+)"
           description="Terminals failing to report heartbeats"
-          items={data.inactiveClients} 
-          actionLabel="Contact Owner" 
-          contact 
+          items={data.inactiveClients}
+          actionLabel="Contact Owner"
+          contact
         />
       </div>
+
+      {/* Extended Analytics */}
+      {extended && (
+        <>
+          {/* Revenue & Growth */}
+          <div className="grid gap-6 xl:grid-cols-3">
+            <Card className="xl:col-span-2">
+              <CardHeader title="Monthly Revenue" description="Collected payments across paid transactions" />
+              <div className="h-64 px-4 pb-4">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={extended.revenue.monthly} margin={{ top: 5, right: 5, left: -15, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#0048eb" stopOpacity={0.35} />
+                        <stop offset="100%" stopColor="#0048eb" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                    <XAxis dataKey="month" tickLine={false} axisLine={false} />
+                    <YAxis tickLine={false} axisLine={false} />
+                    <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+                    <Area type="monotone" dataKey="revenue" stroke="#0048eb" strokeWidth={2} fill="url(#revGrad)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </Card>
+            <Card>
+              <CardHeader title="Revenue by Plan" description="Distribution across licensing tiers" />
+              <div className="h-64 px-4 pb-4">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={extended.revenue.byPlan} dataKey="revenue" nameKey="plan" cx="50%" cy="50%" innerRadius={45} outerRadius={80} paddingAngle={3}>
+                      {extended.revenue.byPlan.map((_entry, index) => (
+                        <Cell key={index} fill={chartColors[index % chartColors.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="flex flex-wrap justify-center gap-3 -mt-2">
+                  {extended.revenue.byPlan.map((entry, index) => (
+                    <span key={entry.plan} className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600">
+                      <span className="h-2 w-2 rounded-full" style={{ background: chartColors[index % chartColors.length] }} />
+                      {entry.plan} · {formatCurrency(entry.revenue)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </Card>
+          </div>
+
+          <div className="grid gap-6 xl:grid-cols-2">
+            <Card>
+              <CardHeader title="New Activations" description="Client activations per month" />
+              <div className="h-56 px-4 pb-4">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={extended.activations.perMonth} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                    <XAxis dataKey="month" tickLine={false} axisLine={false} />
+                    <YAxis tickLine={false} axisLine={false} allowDecimals={false} />
+                    <Tooltip />
+                    <Bar dataKey="activations" fill="#7c3aed" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </Card>
+            <Card>
+              <CardHeader title="Client DB Footprint" description="Average local SQLite size across clients" />
+              <div className="h-56 px-4 pb-4">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={extended.resourceUsage.dbSizeTrend} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                    <XAxis dataKey="date" tickLine={false} axisLine={false} />
+                    <YAxis tickLine={false} axisLine={false} />
+                    <Tooltip formatter={(value) => `${Number(value).toFixed(1)} MB`} />
+                    <Line type="monotone" dataKey="dbSizeMB" stroke="#f59e0b" strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </Card>
+          </div>
+
+          {/* Errors */}
+          <Card>
+            <CardHeader title="Client Error Feed" description="Error & fatal events across terminals (last 7 days)" />
+            <div className="grid gap-6 lg:grid-cols-3 p-6 pt-2">
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <AlertTriangle className="h-4 w-4 text-rose-500" />
+                  <span className="text-sm font-bold text-slate-700">{extended.errors.total} errors in 7 days</span>
+                </div>
+                <div className="space-y-2">
+                  {extended.errors.byLevel.map((item) => (
+                    <div key={item.level} className="flex items-center gap-3">
+                      <span className="w-12 text-xs font-bold uppercase text-slate-500">{item.level}</span>
+                      <div className="h-2.5 flex-1 rounded-full bg-slate-100 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${item.level === 'fatal' ? 'bg-red-950' : item.level === 'error' ? 'bg-rose-500' : item.level === 'warn' ? 'bg-amber-500' : 'bg-sky-500'}`}
+                          style={{ width: `${extended.errors.total > 0 ? (item.count / extended.errors.total) * 100 : 0}%` }}
+                        />
+                      </div>
+                      <span className="w-8 text-right text-xs font-bold text-slate-600">{item.count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Top Error Messages</p>
+                <div className="space-y-2">
+                  {extended.errors.topMessages.slice(0, 6).map((item, index) => (
+                    <div key={index} className="flex items-start gap-2.5">
+                      <span className="mt-0.5 shrink-0 rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold text-rose-600">{item.count}×</span>
+                      <p className="truncate text-xs font-semibold text-slate-600" title={item.message}>{item.message}</p>
+                    </div>
+                  ))}
+                  {!extended.errors.topMessages.length && <p className="text-xs text-slate-400">No error messages logged</p>}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Top Failing Clients</p>
+                <div className="space-y-2">
+                  {extended.errors.topFailingClients.slice(0, 6).map((item) => (
+                    <NavLink key={item.licenseId} to={`/clients/${item.licenseId}`} className="flex items-center justify-between gap-2 rounded-lg p-2 transition hover:bg-slate-50">
+                      <span className="truncate text-xs font-bold text-slate-700">{item.shopName}</span>
+                      <span className="shrink-0 rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold text-rose-600">{item.count}×</span>
+                    </NavLink>
+                  ))}
+                  {!extended.errors.topFailingClients.length && <p className="text-xs text-slate-400">No failing clients</p>}
+                </div>
+              </div>
+            </div>
+          </Card>
+        </>
+      )}
     </div>
   )
 }

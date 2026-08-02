@@ -4,7 +4,7 @@ import { NavLink } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMutationToast } from '../hooks/useMutationToast'
 import { Search, RotateCcw, Ban, RefreshCcw, Copy, Eye, Check, Download, Calendar } from 'lucide-react'
-import { api, copyText, timeAgo, daysRemaining } from '../lib'
+import { api, copyText, timeAgo, daysRemaining, connectionStatus } from '../lib'
 import type { Client } from '../lib'
 import { Card, Input, Select, PlanBadge, StatusBadge, Button, ErrorState } from '../components/ui'
 import { SortTh } from '../components/SortTh'
@@ -269,6 +269,7 @@ export default function ClientsPage() {
                 <SortTh field="status" sort={sort} onSort={setSort}>Licensing status</SortTh>
                 <SortTh field="expiresAt" sort={sort} onSort={setSort}>Expiration date</SortTh>
                 <SortTh field="lastHeartbeatAt" sort={sort} onSort={setSort}>Last heartbeat</SortTh>
+                <th className="px-4 py-4">Connection</th>
                 <th className="px-5.5 py-4 text-right">Actions</th>
               </tr>
             </thead>
@@ -345,6 +346,38 @@ export default function ClientsPage() {
                             Never synced
                           </span>
                         )}
+                      </td>
+                      <td className="px-4 py-4.5">
+                        {(() => {
+                          const cs = connectionStatus(client.lastHeartbeatAt)
+                          if (cs === 'online') return (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
+                              <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                              </span>
+                              Online
+                            </span>
+                          )
+                          if (cs === 'stale') return (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700">
+                              <span className="h-2 w-2 rounded-full bg-amber-400" />
+                              Stale
+                            </span>
+                          )
+                          if (cs === 'offline') return (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-700">
+                              <span className="h-2 w-2 rounded-full bg-rose-500" />
+                              Offline
+                            </span>
+                          )
+                          return (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-500">
+                              <span className="h-2 w-2 rounded-full bg-slate-400" />
+                              Never
+                            </span>
+                          )
+                        })()}
                       </td>
                       <td className="px-5.5 py-4.5 text-right">
                         <div className="inline-flex items-center gap-1.5 opacity-80 group-hover:opacity-100 transition duration-150">

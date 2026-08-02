@@ -3,12 +3,12 @@ import { useConfirmDialog } from '../hooks/useConfirmDialog.tsx'
 import { useParams, useNavigate, NavLink } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMutationToast } from '../hooks/useMutationToast'
-import { 
-  ArrowLeft, Ban, RotateCcw, CalendarClock, RefreshCcw, Copy, Trash2, 
-  Cpu, HardDrive, CpuIcon, Layers, Laptop, ShieldCheck, 
-  Activity, Info, Clock, Check, CreditCard, DollarSign
+import {
+  ArrowLeft, Ban, RotateCcw, CalendarClock, RefreshCcw, Copy, Trash2,
+  Cpu, HardDrive, CpuIcon, Layers, Laptop, ShieldCheck, WifiOff,
+  Activity, Info, Clock, Check, CreditCard, DollarSign, ScrollText
 } from 'lucide-react'
-import { api, formatDate, formatDateTime, formatCurrency, copyText, timeAgo, daysRemaining } from '../lib'
+import { api, formatDate, formatDateTime, formatCurrency, copyText, timeAgo, daysRemaining, connectionStatus } from '../lib'
 import type { ClientDetail, Plan } from '../lib'
 import {
   Card, CardHeader, PlanBadge, StatusBadge, Button,
@@ -16,13 +16,14 @@ import {
 } from '../components/ui'
 import { Line, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { DetailSkeleton } from '../components/Skeletons'
+import { ClientLogsView } from '../components/ClientLogsView'
 
 export default function ClientDetailPage() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
   const qc = useQueryClient()
   
-  const [activeTab, setActiveTab] = useState<'overview' | 'diagnostics' | 'devices' | 'history' | 'payments'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'diagnostics' | 'devices' | 'history' | 'payments' | 'logs'>('overview')
   const [copiedKey, setCopiedKey] = useState(false)
 
   const query = useQuery({ 
@@ -202,6 +203,29 @@ export default function ClientDetailPage() {
 
   return (
     <div className="space-y-6">
+      {/* Offline alert banner – shown when client hasn't checked in for >1 hour */}
+      {(() => {
+        const cs = connectionStatus(client.lastHeartbeatAt)
+        if (cs !== 'offline' && cs !== 'never') return null
+        const isNever = cs === 'never'
+        return (
+          <div className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm">
+            <WifiOff className="h-5 w-5 text-rose-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold text-rose-700">
+                {isNever ? 'Client has never sent a heartbeat' : 'Client is not reporting to the server'}
+              </p>
+              <p className="mt-0.5 text-xs font-semibold text-rose-500">
+                {isNever
+                  ? 'The app may not have been opened or the license has not been activated yet.'
+                  : `Last heartbeat received ${timeAgo(client.lastHeartbeatAt)} (${formatDateTime(client.lastHeartbeatAt)}). The app may be closed, offline, or experiencing a connectivity issue.`
+                }
+              </p>
+            </div>
+          </div>
+        )
+      })()}
+
       {/* Header Back Button & Brief Profile */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
         <div className="flex items-center gap-4">
@@ -213,10 +237,40 @@ export default function ClientDetailPage() {
           </NavLink>
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="font-display text-xl font-bold tracking-tight text-brand-dark">{client.shopName}</h2>
-              <PlanBadge plan={client.plan} />
-              <StatusBadge status={client.status} />
-            </div>
+                <h2 className="font-display text-xl font-bold tracking-tight text-brand-dark">{client.shopName}</h2>
+                <PlanBadge plan={client.plan} />
+                <StatusBadge status={client.status} />
+                {(() => {
+                  const cs = connectionStatus(client.lastHeartbeatAt)
+                  if (cs === 'online') return (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                        <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                      </span>
+                      Online
+                    </span>
+                  )
+                  if (cs === 'stale') return (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-[11px] font-bold text-amber-700">
+                      <span className="h-2 w-2 rounded-full bg-amber-400" />
+                      Stale
+                    </span>
+                  )
+                  if (cs === 'offline') return (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 border border-rose-200 px-2.5 py-0.5 text-[11px] font-bold text-rose-700">
+                      <span className="h-2 w-2 rounded-full bg-rose-500" />
+                      Offline
+                    </span>
+                  )
+                  return (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 border border-slate-200 px-2.5 py-0.5 text-[11px] font-bold text-slate-500">
+                      <span className="h-2 w-2 rounded-full bg-slate-400" />
+                      Never Connected
+                    </span>
+                  )
+                })()}
+              </div>
             <p className="text-xs font-semibold text-slate-400 mt-1">Owner: {client.ownerName} · Phone: {client.phone}</p>
           </div>
         </div>
@@ -277,6 +331,16 @@ export default function ClientDetailPage() {
           }`}
         >
           <CreditCard className="h-4.5 w-4.5" /> Payments
+        </button>
+        <button
+          onClick={() => setActiveTab('logs')}
+          className={`flex items-center gap-2 border-b-2 px-5 py-3.5 text-sm font-bold tracking-tight transition outline-none ${
+            activeTab === 'logs'
+              ? 'border-brand-primary text-brand-primary'
+              : 'border-transparent text-slate-400 hover:text-slate-700'
+          }`}
+        >
+          <ScrollText className="h-4.5 w-4.5" /> Client Logs
         </button>
       </div>
 
@@ -479,7 +543,7 @@ export default function ClientDetailPage() {
           {/* Right Column: Usage Stats, Chart, Internal Notes, Danger Zone */}
           <div className="space-y-6">
             {/* Quick Metrics Grid */}
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-5 gap-3">
               <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-4 text-center">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Bills Total</span>
                 <p className="mt-1 font-display text-lg font-black text-brand-dark">{client.totalBillsGenerated}</p>
@@ -495,6 +559,10 @@ export default function ClientDetailPage() {
               <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-4 text-center">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Bills Today</span>
                 <p className="mt-1 font-display text-lg font-black text-emerald-600">{client.billsToday}</p>
+              </div>
+              <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-4 text-center" onClick={() => setActiveTab('logs')} style={{ cursor: 'pointer' }}>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Errors Logged</span>
+                <p className="mt-1 font-display text-lg font-black text-rose-600">{(client.logSummary?.byLevel?.error ?? 0) + (client.logSummary?.byLevel?.fatal ?? 0)}</p>
               </div>
             </div>
 
@@ -699,6 +767,58 @@ export default function ClientDetailPage() {
                   </p>
                 </div>
               </div>
+
+              {/* Resource Usage Trends */}
+              {(() => {
+                const series = client.heartbeats
+                  .slice()
+                  .reverse()
+                  .slice(-30)
+                  .filter((hb) => hb.metadata?.dbSizeMB != null)
+                  .map((hb) => {
+                    const ramUsed = hb.metadata && hb.metadata.totalMemoryGB != null && hb.metadata.freeMemoryGB != null
+                      ? Math.max(0, Math.round((hb.metadata.totalMemoryGB - hb.metadata.freeMemoryGB) * 100) / 100)
+                      : null
+                    return {
+                      date: hb.timestamp ? new Date(hb.timestamp).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : '—',
+                      dbSizeMB: hb.metadata?.dbSizeMB ?? 0,
+                      ramUsedGB: ramUsed ?? 0
+                    }
+                  })
+
+                return series.length ? (
+                  <div className="grid gap-4.5 xl:grid-cols-2">
+                    <Card>
+                      <CardHeader title="Local DB Size Trend" description="SQLite storage footprint across recent heartbeats" />
+                      <div className="h-56 px-4 pb-4">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={series} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                            <XAxis dataKey="date" tickLine={false} axisLine={false} />
+                            <YAxis tickLine={false} axisLine={false} />
+                            <Tooltip />
+                            <Line type="monotone" dataKey="dbSizeMB" name="DB Size (MB)" stroke="#2563eb" strokeWidth={2} dot={false} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </Card>
+                    <Card>
+                      <CardHeader title="RAM Usage Trend" description="Approximate memory in use across recent heartbeats" />
+                      <div className="h-56 px-4 pb-4">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={series} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                            <XAxis dataKey="date" tickLine={false} axisLine={false} />
+                            <YAxis tickLine={false} axisLine={false} />
+                            <Tooltip />
+                            <Line type="monotone" dataKey="ramUsedGB" name="RAM Used (GB)" stroke="#7c3aed" strokeWidth={2} dot={false} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </Card>
+                  </div>
+                ) : null
+              })()}
             </div>
           ) : (
             <EmptyState title="No Hardware Telemetry Compiled">
@@ -903,6 +1023,12 @@ export default function ClientDetailPage() {
               </EmptyState></div>
             )}
           </Card>
+        </div>
+      )}
+
+      {activeTab === 'logs' && (
+        <div className="space-y-6">
+          <ClientLogsView licenseId={id} />
         </div>
       )}
 

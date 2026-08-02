@@ -11,6 +11,16 @@ export const licenseRateLimit = rateLimit({
   }
 });
 
+export const clientLogRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => {
+    res.status(429).json(errorResponse("RATE_LIMITED", "Too many log requests. Please try again soon."));
+  }
+});
+
 export const adminRateLimit = rateLimit({
   windowMs: 60 * 1000,
   limit: 100,
