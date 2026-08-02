@@ -574,10 +574,14 @@ export function buildLicenseFilters(filters: {
 export type LicenseSort = "shopName" | "ownerName" | "plan" | "status" | "expiresAt" | "lastHeartbeatAt";
 
 export function latestHeartbeatAtSql() {
+  // NOTE: column references inside `sql` templates render WITHOUT table qualifiers,
+  // so `${licenses.id}` becomes bare `"id"` which resolves to the heartbeat row's
+  // own id inside the subquery. Qualify both sides explicitly so the correlation
+  // `heartbeats.license_id = licenses.id` actually works.
   return sql<Date | null>`(
-    select max(${heartbeats.createdAt})
-    from ${heartbeats}
-    where ${heartbeats.licenseId} = ${licenses.id}
+    select max("heartbeats"."created_at")
+    from "heartbeats"
+    where "heartbeats"."license_id" = "licenses"."id"
   )`;
 }
 
