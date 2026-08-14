@@ -33,7 +33,7 @@ Scroll down and click **Advanced** -> **Add Environment Variable**. Add the foll
 
 | Key | Value | Notes |
 | :--- | :--- | :--- |
-| `NODE_VERSION` | `22.0.0` | Forces Node 22 (for built-in SQLite) |
+| `NODE_VERSION` | `22` | Forces Node 22 (for built-in SQLite) |
 | `NODE_ENV` | `production` | Production mode |
 | `DB_PATH` | `./data/sarva-wa.db` | Local database path |
 | `META_VERIFY_TOKEN` | `76a97da89ffdb3f81104ce175a51c118` | Secret webhook verification token |

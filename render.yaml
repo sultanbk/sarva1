@@ -36,7 +36,7 @@ services:
     healthCheckPath: /health
     envVars:
       - key: NODE_VERSION
-        value: "22.0.0"
+        value: "22"
       - key: PORT
         value: "3000"
       - key: NODE_ENV
