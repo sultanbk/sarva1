@@ -31,7 +31,7 @@ services:
     runtime: node
     plan: free
     rootDir: sarva-wa-platform
-    buildCommand: "npm install && npm run build"
+    buildCommand: "npm install --include=dev && npm run build"
     startCommand: "npm run start"
     healthCheckPath: /health
     envVars:
