@@ -25,3 +25,57 @@ services:
         sync: false
       - key: ADMIN_ORIGIN
         value: https://sarva1.vercel.app
+
+  - type: web
+    name: sarva-wa-platform
+    runtime: node
+    plan: free
+    rootDir: sarva-wa-platform
+    buildCommand: "npm install && npm run build"
+    startCommand: "npm run start"
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22.0.0"
+      - key: PORT
+        value: "3000"
+      - key: NODE_ENV
+        value: production
+      - key: DB_PATH
+        value: ./data/sarva-wa.db
+      
+      # Webhook Verify Token (Required)
+      - key: META_VERIFY_TOKEN
+        sync: false # Set in Render Dashboard
+      
+      # Meta API Credentials
+      - key: META_APP_SECRET
+        sync: false
+      
+      # Internal APIs and Keys
+      - key: INTERNAL_API_SECRET
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: SYNC_API_KEY
+        sync: false
+
+      # Optional Default Seeding Values
+      - key: DEFAULT_TENANT_ID
+        value: krishnapriya-textiles
+      - key: DEFAULT_TENANT_NAME
+        value: "Krishnapriya Textiles"
+      - key: DEFAULT_TENANT_WA_PHONE
+        value: "+919108455006"
+      - key: DEFAULT_TENANT_WA_PHONE_ID
+        sync: false
+      - key: DEFAULT_TENANT_WA_BUSINESS_ID
+        sync: false
+      - key: DEFAULT_TENANT_WA_ACCESS_TOKEN
+        sync: false
+      
+      # Razorpay (optional fallback)
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
